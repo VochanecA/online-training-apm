@@ -476,7 +476,7 @@ const Dashboard: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => 
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-2 text-gray-500 text-sm">
               <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-              <span>{lang === 'en' ? 'System Online' : 'Sustav aktivan'}</span>
+              <span>{lang === 'en' ? 'System Online' : 'Sistem aktivan'}</span>
             </div>
             <div className="text-xs text-gray-400">
               v2.1.4 • {lang === 'en' ? 'Production' : 'Produkcija'}
