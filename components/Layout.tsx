@@ -62,7 +62,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, lang, setLang }) => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
               </svg>
             </div>
-            <span className="text-xl font-black tracking-tight uppercase">CloudTraining</span>
+            <span className="text-l font-black tracking-tight uppercase">CloudTraining</span>
           </div>
           
           <div className="flex gap-1">
