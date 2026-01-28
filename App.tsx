@@ -23,7 +23,7 @@ const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [lang, setLang] = useState<Language>(() => {
-    const saved = localStorage.getItem('AeroCert_lang');
+    const saved = localStorage.getItem('skyway_lang');
     return (saved as Language) || 'en';
   });
 
@@ -69,7 +69,7 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('AeroCert_lang', lang);
+    localStorage.setItem('skyway_lang', lang);
   }, [lang]);
 
   if (loading) return (
@@ -86,8 +86,8 @@ const App: React.FC = () => {
     <Router>
       <Layout user={user} lang={lang} setLang={setLang}>
         <Routes>
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/dashboard" element={<Dashboard user={user} lang={lang} />} />
+          <Route path="/" element={<Dashboard user={user} lang={lang} />} />
+          <Route path="/dashboard" element={<Navigate to="/" replace />} />
           <Route path="/courses" element={<Dashboard user={user} lang={lang} />} />
           <Route path="/course/:id" element={<CourseDetail user={user} lang={lang} />} />
           <Route path="/lesson/:courseId/:lessonId" element={<LessonView user={user} lang={lang} />} />
@@ -103,7 +103,7 @@ const App: React.FC = () => {
           <Route path="/admin/course/new" element={<CourseEditor user={user} lang={lang} />} />
           <Route path="/admin/course/edit/:id" element={<CourseEditor user={user} lang={lang} />} />
           
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Layout>
     </Router>

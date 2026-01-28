@@ -32,7 +32,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, lang, setLang }) => {
   const t = translations[lang];
 
   const menuItems = [
-    { label: t.dashboard, icon: 'dashboard', path: '/dashboard' },
+    { label: t.dashboard, icon: 'dashboard', path: '/' },
     { label: t.myCourses, icon: 'courses', path: '/courses' },
     { label: t.profile, icon: 'profile', path: '/profile' },
   ];
@@ -62,7 +62,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, lang, setLang }) => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
               </svg>
             </div>
-            <span className="text-xl font-black tracking-tight uppercase">AeroCert</span>
+            <span className="text-xl font-black tracking-tight uppercase italic">SkyWay</span>
           </div>
           
           <div className="flex gap-1">
@@ -73,25 +73,31 @@ const Layout: React.FC<LayoutProps> = ({ children, user, lang, setLang }) => {
             <button 
               onClick={() => setLang('hr')}
               className={`text-[10px] font-black px-1 rounded transition-colors ${lang === 'hr' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:text-white'}`}
-            >ME</button>
+            >HR</button>
           </div>
         </div>
 
         <nav className="flex-1 mt-6 px-4 space-y-2 overflow-y-auto">
-          {menuItems.map((item) => (
-            <button
-              key={item.path}
-              onClick={() => navigate(item.path)}
-              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-                location.pathname.startsWith(item.path) 
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' 
-                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              <Icon name={item.icon} className="w-5 h-5" />
-              <span className="font-bold text-sm tracking-tight">{item.label}</span>
-            </button>
-          ))}
+          {menuItems.map((item) => {
+            const isActive = item.path === '/' 
+              ? location.pathname === '/' 
+              : location.pathname.startsWith(item.path);
+              
+            return (
+              <button
+                key={item.path}
+                onClick={() => navigate(item.path)}
+                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+                  isActive
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' 
+                    : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                <Icon name={item.icon} className="w-5 h-5" />
+                <span className="font-bold text-sm tracking-tight">{item.label}</span>
+              </button>
+            );
+          })}
         </nav>
 
         <div className="p-4 border-t border-slate-800">
