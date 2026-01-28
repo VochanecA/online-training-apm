@@ -19,38 +19,44 @@ const Login: React.FC<LoginProps> = ({ lang, setLang }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleAuth = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
+const handleAuth = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setLoading(true);
+  setError(null);
 
-    try {
-      if (isRegister) {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
-              full_name: fullName,
-              role: selectedRole,
-            }
-          }
-        });
-        if (error) throw error;
-        alert(lang === 'en' ? 'Registration successful! Please check your email for verification.' : 'Registracija uspješna! Provjerite e-poštu za potvrdu.');
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        if (error) throw error;
-      }
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
+  try {
+    if (isRegister) {
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+            role: selectedRole,
+          },
+          // DODAJTE OVU LINIJU - koristite vašu produkcijsku URL
+          emailRedirectTo: window.location.hostname.includes('localhost') 
+            ? `${window.location.origin}/#/auth/callback`
+            : 'https://online-training-apm.vercel.app/#/auth/callback'
+        }
+      });
+      if (error) throw error;
+      alert(lang === 'en' 
+        ? 'Registration successful! Please check your email for verification. You will be redirected to the login page after verification.' 
+        : 'Registracija uspješna! Provjerite e-poštu za potvrdu. Bit ćete preusmjereni na stranicu za prijavu nakon verifikacije.');
+    } else {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (error) throw error;
     }
-  };
+  } catch (err: any) {
+    setError(err.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const features = [
     { 
@@ -124,7 +130,7 @@ const Login: React.FC<LoginProps> = ({ lang, setLang }) => {
           </div>
           <div>
             <span className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
-              AeroCert
+              CloudTraining
             </span>
             <div className="text-xs font-medium text-gray-400 tracking-wider uppercase">
               Aviation Compliance Platform
@@ -399,7 +405,7 @@ const Login: React.FC<LoginProps> = ({ lang, setLang }) => {
       <div className="relative z-10 max-w-7xl mx-auto px-6 lg:px-12 py-8 mt-20 border-t border-gray-800/50">
         <div className="flex flex-col md:flex-row justify-between items-center text-gray-500 text-sm">
           <div className="mb-4 md:mb-0">
-            <span className="font-medium text-gray-400">© 2026 AeroCert Platform</span>
+            <span className="font-medium text-gray-400">© 2026 CloudTraining Platform</span>
             <span className="mx-2">•</span>
             <span>EASA/ICAO Compliant</span>
           </div>

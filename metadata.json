@@ -1,5 +1,5 @@
 {
-  "name": "AeroCert Learning Management System",
+  "name": "CloudTraining Learning Management System",
   "description": "A streamlined, production-ready LMS for airport staff training, featuring course management, automated exams, and certificate generation.",
   "requestFramePermissions": [
     "camera"

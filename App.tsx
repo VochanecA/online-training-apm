@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { User, UserRole } from './types';
@@ -18,6 +17,7 @@ import UserManagement from './pages/UserManagement';
 import Profile from './pages/Profile';
 import Login from './pages/Login';
 import Reports from './pages/Reports';
+import AuthCallback from './pages/AuthCallback'; // DODAJTE OVO
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -72,6 +72,31 @@ const App: React.FC = () => {
     localStorage.setItem('skyway_lang', lang);
   }, [lang]);
 
+  // Dodajte ovaj useEffect za automatsko rukovanje callback-om
+  useEffect(() => {
+    const handleAuthCallback = async () => {
+      // Proveri da li je ovo callback sa email verifikacije
+      const hash = window.location.hash;
+      
+      // Supabase koristi access_token u hash-u za email verifikaciju
+      if (hash.includes('access_token') && hash.includes('type=signup')) {
+        // Supabase će automatski obraditi token
+        // Sačekajte malo da se session učita
+        setTimeout(async () => {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session) {
+            // Uspješna verifikacija - možete pokazati poruku ili preusmjeriti
+            console.log('Email successfully verified!');
+            // Ukloni hash iz URL-a
+            window.location.hash = '';
+          }
+        }, 1000);
+      }
+    };
+
+    handleAuthCallback();
+  }, []);
+
   if (loading) return (
     <div className="min-h-screen bg-slate-950 flex items-center justify-center">
       <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent shadow-[0_0_20px_rgba(59,130,246,0.5)]"></div>
@@ -95,6 +120,9 @@ const App: React.FC = () => {
           <Route path="/certificate/:courseId" element={<CertificateView user={user} lang={lang} />} />
           <Route path="/training-record/:courseId" element={<TrainingRecordView user={user} lang={lang} />} />
           <Route path="/profile" element={<Profile user={user} lang={lang} />} />
+          
+          {/* DODAJTE CALLBACK RUTU */}
+          <Route path="/auth/callback" element={<AuthCallback lang={lang} />} />
           
           {/* Management Routes */}
           <Route path="/admin/courses" element={<CourseManagement user={user} lang={lang} />} />

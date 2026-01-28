@@ -91,7 +91,7 @@ const Profile: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => {
                        </div>
                        <h4 className="text-[11px] font-black uppercase tracking-[0.3em] text-blue-400">Security Credentials Verification</h4>
                     </div>
-                    <p className="text-base font-medium leading-relaxed opacity-70">AeroCert credentials are subject to continuous regulatory oversight. All training activities, session times, and exam performance are logged immutably for aviation authority audit readiness.</p>
+                    <p className="text-base font-medium leading-relaxed opacity-70">CloudTraining credentials are subject to continuous regulatory oversight. All training activities, session times, and exam performance are logged immutably for aviation authority audit readiness.</p>
                  </div>
               </div>
            </div>

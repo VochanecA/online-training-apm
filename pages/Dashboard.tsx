@@ -469,7 +469,7 @@ const Dashboard: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => 
       <footer className="mt-12 pt-8 border-t border-gray-200">
         <div className="flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="text-gray-500 text-sm">
-            <span className="font-semibold text-gray-700">AeroCert Platform</span>
+            <span className="font-semibold text-gray-700">CloudTraining Platform</span>
             <span className="mx-2">•</span>
             <span>{lang === 'en' ? 'Last updated' : 'Zadnje ažurirano'} {new Date().toLocaleDateString()}</span>
           </div>

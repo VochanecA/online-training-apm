@@ -82,7 +82,7 @@ const CertificateView: React.FC<{ user: User, lang: Language }> = ({ user, lang 
             <div className="text-left">
               <div className="border-b-2 border-slate-200 w-56 mb-3"></div>
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">{t.trainingDirector}</p>
-              <p className="text-sm text-slate-900 font-black">AeroCert Aviation Academy</p>
+              <p className="text-sm text-slate-900 font-black">CloudTraining Aviation Academy</p>
             </div>
             
             <div className="text-center bg-slate-50 px-6 py-4 rounded-2xl border border-slate-100 shadow-inner">
