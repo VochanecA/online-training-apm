@@ -134,7 +134,7 @@ const Dashboard: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => 
               Welcome back, <span className="bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">{user.name}</span>
             </h1>
             <p className="text-gray-600 text-lg font-medium max-w-2xl">
-              {t.overview} • {new Date().toLocaleDateString(lang === 'en' ? 'en-US' : 'hr-HR', { 
+              {t.overview} • {new Date().toLocaleDateString(lang === 'en' ? 'en-US' : 'sr-ME', { 
                 weekday: 'long', 
                 year: 'numeric', 
                 month: 'long', 
