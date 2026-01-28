@@ -133,7 +133,7 @@ const handleAuth = async (e: React.FormEvent) => {
               CloudTraining
             </span>
             <div className="text-xs font-medium text-gray-400 tracking-wider uppercase">
-              Aviation Compliance Platform
+              Airport Online Training System
             </div>
           </div>
         </div>
