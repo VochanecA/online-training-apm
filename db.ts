@@ -2,11 +2,11 @@
 import { Course, Progress, User, UserRole, Lesson, Material, AuditLog, ExamAttempt } from './types';
 
 const STORAGE_KEYS = {
-  COURSES: 'AeroCert_courses',
-  USERS: 'AeroCert_users',
-  PROGRESS: 'AeroCert_progress',
-  CURRENT_USER: 'AeroCert_current_user',
-  AUDIT_LOGS: 'AeroCert_audit_logs'
+  COURSES: 'skyway_courses',
+  USERS: 'skyway_users',
+  PROGRESS: 'skyway_progress',
+  CURRENT_USER: 'skyway_current_user',
+  AUDIT_LOGS: 'skyway_audit_logs'
 };
 
 const INITIAL_COURSES: Course[] = [
@@ -30,7 +30,7 @@ const INITIAL_COURSES: Course[] = [
         order: 1,
         minLearningTimeMinutes: 2,
         materials: [
-          { id: 'm1', type: 'video', title: 'Security Perimeter Overview', url: 'https://www.youtube.com/embed/QWZ9byhN8Jk' },
+          { id: 'm1', type: 'video', title: 'Security Perimeter Overview', url: 'https://www.youtube.com/embed/dQw4w9WgXcQ' },
           { id: 'm2', type: 'pdf', title: 'Security Manual V1', url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf' }
         ]
       },
@@ -67,8 +67,16 @@ const INITIAL_COURSES: Course[] = [
 
 export const db = {
   getCourses: (): Course[] => {
-    const data = localStorage.getItem(STORAGE_KEYS.COURSES);
-    return data ? JSON.parse(data) : INITIAL_COURSES;
+    try {
+      const data = localStorage.getItem(STORAGE_KEYS.COURSES);
+      const parsed = data ? JSON.parse(data) : INITIAL_COURSES;
+      // Ensure it's an array and has basics
+      if (!Array.isArray(parsed)) return INITIAL_COURSES;
+      return parsed;
+    } catch (e) {
+      console.error("Data integrity error, resetting courses:", e);
+      return INITIAL_COURSES;
+    }
   },
   saveCourses: (courses: Course[]) => {
     localStorage.setItem(STORAGE_KEYS.COURSES, JSON.stringify(courses));
@@ -101,7 +109,6 @@ export const db = {
     const progressList = db.getProgress();
     const existing = progressList.find(p => p.userId === userId && p.courseId === courseId);
     if (existing) {
-      // Ensure new tracking fields exist for existing records
       if (!existing.lessonTimeSpent) existing.lessonTimeSpent = {};
       if (!existing.lessonStartTimes) existing.lessonStartTimes = {};
       return existing;

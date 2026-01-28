@@ -47,7 +47,7 @@ const TrainingRecordView: React.FC<{ user: User, lang: Language }> = ({ user, la
         <div className="flex justify-between items-start border-b-4 border-slate-900 pb-8 mb-10">
           <div>
             <h1 className="text-4xl font-black text-slate-900 uppercase tracking-tighter mb-2">{t.trainingRecord}</h1>
-            <p className="text-sm font-bold text-slate-400 uppercase tracking-widest italic">Aviation Personnel Training & Qualification File</p>
+            <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Aviation Personnel Training & Qualification File</p>
           </div>
           <div className="text-right">
              <div className="bg-slate-900 text-white px-4 py-2 rounded font-black text-[10px] uppercase tracking-[0.2em] mb-3">CloudTraining Aviation</div>
@@ -122,7 +122,7 @@ const TrainingRecordView: React.FC<{ user: User, lang: Language }> = ({ user, la
                  <span className="text-4xl font-black text-slate-900">{progress.examScore}%</span>
                  <span className="text-xs font-bold text-green-600 uppercase mb-1">Pass (Threshold {course.exam?.passingScore}%)</span>
               </div>
-              <p className="text-[10px] font-bold text-slate-500 italic">Attempted {progress.attempts.length} times. Final record immutable.</p>
+              <p className="text-[10px] font-bold text-slate-500">Attempted {progress.attempts.length} times. Final record immutable.</p>
            </div>
            {course.requiresPracticalCheck && (
              <div className="p-6 bg-slate-50 border border-slate-100 rounded-2xl">
@@ -133,7 +133,9 @@ const TrainingRecordView: React.FC<{ user: User, lang: Language }> = ({ user, la
                   </span>
                 </div>
                 {progress.practicalCheckComment && (
-                  <p className="text-xs text-slate-600 border-l-2 border-slate-200 pl-3 italic">"{progress.practicalCheckComment}"</p>
+                  <p className="text-xs text-slate-600 border-l-2 border-slate-200 pl-3">
+                    "{progress.practicalCheckComment}"
+                  </p>
                 )}
              </div>
            )}
@@ -149,13 +151,13 @@ const TrainingRecordView: React.FC<{ user: User, lang: Language }> = ({ user, la
            <div className="bg-slate-50 p-6 border-2 border-double border-slate-200 rounded-2xl rotate-1">
               <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-2 text-center">Quality Assurance Stamp</p>
               <div className="w-20 h-20 border-4 border-blue-600/20 rounded-full flex items-center justify-center text-blue-600 font-black text-[10px] flex-col opacity-50">
-                <span className="tracking-tighter">CloudTraining</span>
+                <span className="tracking-tighter uppercase">Cloud</span>
                 <span className="text-[8px]">CERTIFIED</span>
               </div>
            </div>
 
            <div className="text-center">
-              <div className="w-56 border-b-2 border-slate-900 mb-2 font-serif italic text-sm pt-4">/ Signed Electronically /</div>
+              <div className="w-56 border-b-2 border-slate-900 mb-2 font-mono text-xs pt-4 uppercase font-bold tracking-widest">Signed Electronically</div>
               <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Instructor / Authorized Mentor</p>
            </div>
         </div>

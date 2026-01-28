@@ -310,7 +310,7 @@ const ExamView: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => {
           >
             {t.submitExam}
           </button>
-          <p className="mt-6 text-slate-400 text-xs font-black uppercase tracking-widest italic">
+          <p className="mt-6 text-slate-400 text-xs font-black uppercase tracking-widest">
             {Object.keys(answers).length} / {randomizedQuestions.length} questions answered
           </p>
         </div>

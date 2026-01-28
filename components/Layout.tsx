@@ -56,13 +56,13 @@ const Layout: React.FC<LayoutProps> = ({ children, user, lang, setLang }) => {
       {/* Sidebar */}
       <aside className="w-64 bg-slate-900 text-white flex flex-col shrink-0">
         <div className="p-6 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-3 cursor-pointer" onClick={() => navigate('/')}>
             <div className="bg-blue-600 p-2 rounded-lg shadow-lg shadow-blue-500/20">
               <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
               </svg>
             </div>
-            <span className="text-l font-black tracking-tight uppercase">CloudTraining</span>
+            <span className="text-xl font-black tracking-tight uppercase">CloudTraining</span>
           </div>
           
           <div className="flex gap-1">
@@ -71,9 +71,9 @@ const Layout: React.FC<LayoutProps> = ({ children, user, lang, setLang }) => {
               className={`text-[10px] font-black px-1 rounded transition-colors ${lang === 'en' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:text-white'}`}
             >EN</button>
             <button 
-              onClick={() => setLang('hr')}
-              className={`text-[10px] font-black px-1 rounded transition-colors ${lang === 'hr' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:text-white'}`}
-            >HR</button>
+              onClick={() => setLang('me')}
+              className={`text-[10px] font-black px-1 rounded transition-colors ${lang === 'me' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:text-white'}`}
+            >ME</button>
           </div>
         </div>
 

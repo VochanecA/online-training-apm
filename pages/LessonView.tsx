@@ -134,7 +134,7 @@ const LessonView: React.FC<{ user: User, lang: Language }> = ({ user, lang }) =>
         <div className="p-10 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
           <div>
             <h1 className="text-4xl font-black text-slate-900 tracking-tighter leading-tight">{lesson.title}</h1>
-            <p className="text-slate-500 mt-2 font-medium text-lg italic">{lesson.description}</p>
+            <p className="text-slate-500 mt-2 font-medium text-lg">{lesson.description}</p>
           </div>
           {secondsRemaining > 0 && (
             <div className="px-6 py-4 bg-amber-50 text-amber-700 rounded-2xl border border-amber-100 font-black text-xs shadow-inner flex items-center gap-4 animate-pulse">

@@ -69,7 +69,7 @@ const CertificateView: React.FC<{ user: User, lang: Language }> = ({ user, lang 
           <p className="text-sm font-black tracking-[0.4em] uppercase text-slate-400 mb-8">{t.certificateOfCompletion}</p>
           
           <h1 className="text-slate-500 text-xl mb-4 font-medium">{t.certifyThat}</h1>
-          <h2 className="text-6xl font-serif text-slate-900 italic font-black mb-10 tracking-tight">{user.name}</h2>
+          <h2 className="text-6xl text-slate-900 font-black mb-10 tracking-tight">{user.name}</h2>
           
           <h1 className="text-slate-500 text-xl mb-4 font-medium">{t.completedCourse}</h1>
           <h2 className="text-4xl font-black text-blue-700 mb-14 tracking-tight uppercase">{course.title}</h2>

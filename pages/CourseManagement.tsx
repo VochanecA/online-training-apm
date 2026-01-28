@@ -94,7 +94,7 @@ const CourseManagement: React.FC<{ user: User, lang: Language }> = ({ user, lang
             <tbody className="divide-y divide-slate-50">
               {filteredCourses.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-slate-400 italic">
+                  <td colSpan={6} className="px-6 py-12 text-center text-slate-400 font-medium uppercase tracking-widest text-xs">
                     {t.noCoursesFound}
                   </td>
                 </tr>

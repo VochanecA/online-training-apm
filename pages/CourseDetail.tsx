@@ -133,7 +133,7 @@ const CourseDetail: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                         </p>
                       </div>
                       {progress.practicalCheckComment && (
-                        <div className="p-4 bg-white/50 rounded-xl border border-green-200 text-xs text-slate-600 italic">
+                        <div className="p-4 bg-white/50 rounded-xl border border-green-200 text-xs text-slate-600">
                           "{progress.practicalCheckComment}"
                         </div>
                       )}
@@ -201,7 +201,7 @@ const CourseDetail: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
 
             <div className="order-1 lg:order-2">
               <div className="bg-slate-900 p-6 sm:p-8 rounded-2xl sm:rounded-[2.5rem] text-white shadow-2xl lg:sticky lg:top-8">
-                <h3 className="font-black text-lg sm:text-xl mb-6 tracking-tight uppercase italic underline decoration-blue-500 decoration-4 underline-offset-8">{t.completionStatus}</h3>
+                <h3 className="font-black text-lg sm:text-xl mb-6 tracking-tight uppercase underline decoration-blue-500 decoration-4 underline-offset-8">{t.completionStatus}</h3>
                 
                 <div className="space-y-6">
                    <div>

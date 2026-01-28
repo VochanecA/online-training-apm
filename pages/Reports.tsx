@@ -50,13 +50,12 @@ const Reports: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => {
         return candidateName.includes(query) || courseTitle.includes(query);
       })
       .filter(p => {
-        // Use completionDate or latest attempt date for range filtering
         const dateStr = p.completionDate || (p.attempts.length > 0 ? p.attempts[p.attempts.length - 1].timestamp : null);
         if (!dateStr) return true;
         
         const timestamp = new Date(dateStr).getTime();
         if (filterStartDate && timestamp < new Date(filterStartDate).getTime()) return false;
-        if (filterEndDate && timestamp > new Date(filterEndDate).getTime() + 86400000) return false; // Add day to include full end date
+        if (filterEndDate && timestamp > new Date(filterEndDate).getTime() + 86400000) return false;
         return true;
       });
   }, [progressData, filterCourseId, filterStartDate, filterEndDate, filterStatus, searchQuery, users, courses]);
@@ -71,7 +70,7 @@ const Reports: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => {
       CompletionDate: p.completionDate || 'N/A',
       Attempts: p.attempts.length
     }));
-    db.exportToCSV(dataToExport, `AeroCert_Training_Records_${new Date().toISOString().split('T')[0]}`);
+    db.exportToCSV(dataToExport, `CloudTraining_Records_${new Date().toISOString().split('T')[0]}`);
   };
 
   const handleExportAudit = () => {
@@ -81,7 +80,7 @@ const Reports: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => {
       Action: log.action,
       Details: log.details
     }));
-    db.exportToCSV(dataToExport, `AeroCert_Audit_Log_${new Date().toISOString().split('T')[0]}`);
+    db.exportToCSV(dataToExport, `CloudTraining_Audit_Log_${new Date().toISOString().split('T')[0]}`);
   };
 
   const resetFilters = () => {
@@ -281,7 +280,7 @@ const Reports: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => {
                       <td className="px-8 py-5 text-[10px] text-slate-400 font-black tracking-widest uppercase">{new Date(log.timestamp).toLocaleString()}</td>
                       <td className="px-8 py-5 font-black text-slate-900 text-sm tracking-tight">{getCandidateName(log.userId)}</td>
                       <td className="px-8 py-5"><span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-lg text-[9px] font-black tracking-widest uppercase border border-slate-200 shadow-sm">{log.action}</span></td>
-                      <td className="px-8 py-5 text-slate-600 text-sm font-medium italic leading-relaxed">{log.details}</td>
+                      <td className="px-8 py-5 text-slate-600 text-sm font-medium leading-relaxed">{log.details}</td>
                     </tr>
                   ))}
                 </tbody>
