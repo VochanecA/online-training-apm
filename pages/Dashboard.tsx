@@ -224,7 +224,7 @@ const Dashboard: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => 
                     >
                       {warn.refresherId 
                         ? (lang === 'en' ? 'Start Refresher' : 'Započni osvježavanje')
-                        : (lang === 'en' ? 'Review Course' : 'Pregledaj tečaj')
+                        : (lang === 'en' ? 'Review Course' : 'Pregledaj kurs')
                       }
                     </button>
                   </div>
@@ -433,7 +433,7 @@ const Dashboard: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => 
                         }}
                         className="px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white text-sm font-semibold rounded-lg transition-all duration-300 hover:shadow-lg active:scale-95"
                       >
-                        {lang === 'en' ? 'View Course' : 'Pogledaj tečaj'}
+                        {lang === 'en' ? 'View Course' : 'Pogledaj kurs'}
                       </button>
                     </div>
                   </div>
@@ -452,7 +452,7 @@ const Dashboard: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => 
             <p className="text-gray-500 mb-6 max-w-md mx-auto">
               {lang === 'en' 
                 ? 'No courses match your search. Try a different term or browse all courses.'
-                : 'Nijedan tečaj ne odgovara vašoj pretrazi. Pokušajte s drugim pojmom ili pregledajte sve tečajeve.'
+                : 'Nijedan kurs ne odgovara vašoj pretrazi. Pokušajte s drugim pojmom ili pregledajte sve kurseve.'
               }
             </p>
             <button 
