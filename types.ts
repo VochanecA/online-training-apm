@@ -27,13 +27,16 @@ export interface User {
   updatedAt?: string;
 }
 
+
+
+
 export interface Material {
   id: string;
   type: 'pdf' | 'video' | 'pptx' | 'text';
   title: string;
   url: string;
   content?: string;
-  // Timestamp polja za Supabase
+  fileName?: string; 
   createdAt?: string;
   updatedAt?: string;
 }

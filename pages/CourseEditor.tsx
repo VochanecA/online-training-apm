@@ -1,21 +1,67 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { AlertCircle, Trash2 } from 'lucide-react';
 import { db } from '../db';
+import { supabase } from '../lib/supabase';
 import { Course, Lesson, Material, Exam, Question, User, UserRole } from '../types';
 import { geminiService } from '../geminiService';
 import { Language, translations } from '../translations';
+import { MaterialUpload } from '../components/Materialupload';
 
-const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => {
+// Helper function to extract filename from URL
+const extractFileNameFromUrl = (url: string): string => {
+  if (!url) return 'File';
+  
+  try {
+    const urlParts = url.split('/');
+    let fileName = urlParts[urlParts.length - 1];
+    
+    // Decode URL-encoded characters
+    fileName = decodeURIComponent(fileName);
+    
+    // Remove timestamp prefix if exists (e.g., "1737891234567_myfile.pdf")
+    const underscoreIndex = fileName.indexOf('_');
+    if (underscoreIndex !== -1) {
+      fileName = fileName.substring(underscoreIndex + 1);
+    }
+    
+    // Remove query parameters if they exist
+    const questionMarkIndex = fileName.indexOf('?');
+    if (questionMarkIndex !== -1) {
+      fileName = fileName.substring(0, questionMarkIndex);
+    }
+    
+    return fileName || 'File';
+  } catch (error) {
+    console.error('Error extracting filename:', error);
+    return 'File';
+  }
+};
+
+// Helper function to check if URL is from Supabase Storage
+const isSupabaseStorageUrl = (url: string): boolean => {
+  return url.includes('supabase.co/storage/v1/object/public/materials/');
+};
+
+// Main CourseEditor Component
+const CourseEditor: React.FC<{ user: User; lang: Language }> = ({ user, lang }) => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const t = translations[lang];
   const [loadingAI, setLoadingAI] = useState(false);
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
-  const [newQuestion, setNewQuestion] = useState<Partial<Question>>({ text: '', options: ['', '', '', ''], correctOptionIndex: 0 });
+  const [newQuestion, setNewQuestion] = useState<Partial<Question>>({ 
+    text: '', 
+    options: ['', '', '', ''], 
+    correctOptionIndex: 0 
+  });
   const [users, setUsers] = useState<User[]>([]);
   const [allCourses, setAllCourses] = useState<Course[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [deletingFile, setDeletingFile] = useState<string | null>(null);
+  const [deletingMaterial, setDeletingMaterial] = useState<string | null>(null);
+  const [savingMaterial, setSavingMaterial] = useState<string | null>(null);
 
   const [course, setCourse] = useState<Partial<Course>>({
     title: '',
@@ -32,7 +78,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
   });
 
   useEffect(() => {
-    const loadData = async () => {
+    const loadData = async (): Promise<void> => {
       if (user.role === UserRole.TRAINEE || user.role === UserRole.INSPECTOR) {
         navigate('/dashboard');
         return;
@@ -72,7 +118,46 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
               instructorId: existing.instructorId,
               lessons: existing.lessons?.length || 0
             });
-            setCourse(existing);
+            
+            // Load materials from public.materials table for each lesson
+            const lessonsWithMaterials = await Promise.all(
+              existing.lessons.map(async (lesson) => {
+                try {
+                  console.log(`Loading materials for lesson: ${lesson.id}`);
+                  const { data: materials, error } = await supabase
+                    .from('materials')
+                    .select('*')
+                    .eq('lesson_id', lesson.id)
+                    .order('created_at', { ascending: true });
+                  
+                  if (error) {
+                    console.error(`Error loading materials for lesson ${lesson.id}:`, error);
+                    return lesson;
+                  }
+                  
+                  console.log(`Found ${materials?.length || 0} materials for lesson ${lesson.id}`);
+                  
+                  return {
+                    ...lesson,
+                    materials: materials?.map(material => ({
+                      id: material.id,
+                      type: material.type as Material['type'],
+                      title: material.title,
+                      url: material.url || '',
+                      content: material.content || undefined
+                    })) || []
+                  };
+                } catch (error) {
+                  console.error(`Error processing lesson ${lesson.id}:`, error);
+                  return lesson;
+                }
+              })
+            );
+            
+            setCourse({
+              ...existing,
+              lessons: lessonsWithMaterials
+            });
           } else {
             console.log('Course not found with id:', id);
             alert(lang === 'en' ? 'Course not found' : 'Kurs nije pronađen');
@@ -89,7 +174,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
       }
     };
 
-    loadData();
+    void loadData();
   }, [id, user, navigate, lang]);
 
   const instructors = useMemo(() => 
@@ -97,7 +182,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
     [users]
   );
 
-  const saveCourse = async () => {
+  const saveCourse = async (): Promise<void> => {
     console.log('=== SAVE COURSE STARTED ===');
     console.log('Course title:', course.title);
     console.log('Course instructor:', course.instructorId);
@@ -105,7 +190,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
     console.log('Course lessons:', course.lessons?.length || 0);
     console.log('Course exam questions:', course.exam?.questions?.length || 0);
     
-    // Validacija
+    // Validation
     if (!course.title || course.title.trim() === '') {
       alert(lang === 'en' ? 'Course title is required' : 'Naslov kursa je obavezan');
       return;
@@ -119,9 +204,9 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
     setIsSaving(true);
     
     try {
-      // Kreiraj osnovne podatke kursa
+      // Create course data
       const courseToSave: Course = {
-        id: course.id, // Neka bude undefined za nove kurseve - Supabase će generisati UUID
+        id: course.id || '',
         title: course.title.trim(),
         description: course.description || '',
         version: course.version || '1.0.0',
@@ -144,14 +229,14 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
         hasExam: !!courseToSave.exam
       });
       
-      // Sačuvaj kurs u bazu
+      // Save course to database
       console.log('Calling db.saveCourse...');
       const savedCourse = await db.saveCourse(courseToSave);
       
       if (savedCourse) {
         console.log('Course saved successfully:', savedCourse.id);
         
-        // Log akciju
+        // Log action
         try {
           await db.logAction(user.id, 'COURSE_SAVE', `Saved course: ${savedCourse.title} (v${savedCourse.version})`);
         } catch (logError) {
@@ -160,14 +245,14 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
         
         alert(lang === 'en' ? 'Course saved successfully!' : 'Kurs uspješno sačuvan!');
         
-        // Ažuriraj lokalni state sa sačuvanim kursom
+        // Update local state
         setCourse(savedCourse);
         
-        // Ažuriraj listu svih kurseva
+        // Update courses list
         const updatedCourses = await db.getCourses();
         setAllCourses(updatedCourses);
         
-        // Ako je novi kurs, preusmeri na edit stranicu sa pravim ID-om
+        // If new course, redirect to edit page with proper ID
         if (!id) {
           navigate(`/admin/course/edit/${savedCourse.id}`);
         }
@@ -175,15 +260,13 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
         console.error('Failed to save course: db.saveCourse returned null');
         alert(lang === 'en' ? 'Failed to save course - please check console for details' : 'Greška pri čuvanju kursa - proverite konzolu za detalje');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('=== ERROR SAVING COURSE ===');
       console.error('Error:', error);
-      console.error('Error message:', error.message);
-      console.error('Error stack:', error.stack);
       
       let errorMessage = lang === 'en' ? 'Error saving course: ' : 'Greška pri čuvanju kursa: ';
       
-      if (error.message) {
+      if (error instanceof Error) {
         errorMessage += error.message;
       } else {
         errorMessage += lang === 'en' ? 'Unknown error' : 'Nepoznata greška';
@@ -196,9 +279,9 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
     }
   };
 
-  const addLesson = () => {
+  const addLesson = (): void => {
     const newLesson: Lesson = {
-      id: '', // Prazan string - biće generisan od Supabase-a
+      id: '',
       courseId: course.id || '',
       title: 'New Lesson',
       description: '',
@@ -209,29 +292,57 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
     setCourse({ ...course, lessons: [...(course.lessons || []), newLesson] });
   };
 
-  const updateLesson = (idx: number, updates: Partial<Lesson>) => {
+  const updateLesson = (idx: number, updates: Partial<Lesson>): void => {
     const lessons = [...(course.lessons || [])];
     lessons[idx] = { ...lessons[idx], ...updates };
     setCourse({ ...course, lessons });
   };
 
-  const deleteLesson = (idx: number) => {
+  const deleteLesson = async (idx: number): Promise<void> => {
     const lessons = [...(course.lessons || [])];
+    const lesson = lessons[idx];
+    
+    if (!lesson) return;
+    
+    if (!confirm(lang === 'en' ? 'Are you sure you want to delete this lesson and all its materials?' : 'Da li ste sigurni da želite da obrišete ovu lekciju i sve njene materijale?')) {
+      return;
+    }
+    
+    // Delete all materials from public.materials table for this lesson
+    if (lesson.id) {
+      try {
+        const { error } = await supabase
+          .from('materials')
+          .delete()
+          .eq('lesson_id', lesson.id);
+        
+        if (error) {
+          console.error('Error deleting materials from database:', error);
+          // Continue with deletion anyway
+        }
+      } catch (error) {
+        console.error('Error deleting materials:', error);
+      }
+    }
+    
+    // Delete from local state
     lessons.splice(idx, 1);
     // Re-number the lessons
-    lessons.forEach((lesson, index) => {
-      lesson.order = index + 1;
+    lessons.forEach((lessonItem, index) => {
+      lessonItem.order = index + 1;
     });
     setCourse({ ...course, lessons });
   };
 
-  const addMaterial = (lessonIdx: number, type: 'pdf' | 'video' | 'pptx' | 'text' = 'pdf') => {
+  const addMaterial = (lessonIdx: number, type: 'pdf' | 'video' | 'pptx' | 'text' = 'pdf'): void => {
     const lessons = [...(course.lessons || [])];
     const lesson = lessons[lessonIdx];
+    if (!lesson) return;
+    
     const materials = [...(lesson.materials || [])];
     
     materials.push({ 
-      id: '', // Prazan string - biće generisan od Supabase-a
+      id: '',
       type, 
       title: `New ${type.toUpperCase()}`, 
       url: '',
@@ -242,19 +353,270 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
     setCourse({ ...course, lessons });
   };
 
-  const deleteMaterial = (lessonIdx: number, materialId: string) => {
-    const lessons = [...(course.lessons || [])];
-    const lesson = lessons[lessonIdx];
-    const materials = lesson.materials.filter(m => m.id !== materialId);
-    lessons[lessonIdx] = { ...lesson, materials };
-    setCourse({ ...course, lessons });
+  const saveMaterialToDatabase = async (lessonId: string, material: Material): Promise<Material> => {
+    try {
+      console.log('Saving material to database:', { lessonId, material });
+      
+      // If material has no ID, create new record
+      if (!material.id) {
+        const { data, error } = await supabase
+          .from('materials')
+          .insert({
+            lesson_id: lessonId,
+            type: material.type,
+            title: material.title,
+            url: material.url || null,
+            content: material.content || null
+          })
+          .select()
+          .single();
+        
+        if (error) {
+          console.error('Error creating material:', error);
+          throw error;
+        }
+        
+        console.log('Material created in database:', data);
+        return {
+          ...material,
+          id: data.id
+        };
+      } else {
+        // Update existing record
+        const { data, error } = await supabase
+          .from('materials')
+          .update({
+            title: material.title,
+            url: material.url || null,
+            content: material.content || null,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', material.id)
+          .select()
+          .single();
+        
+        if (error) {
+          console.error('Error updating material:', error);
+          throw error;
+        }
+        
+        console.log('Material updated in database:', data);
+        return material;
+      }
+    } catch (error) {
+      console.error('Error saving material to database:', error);
+      throw error;
+    }
   };
 
-  const handleManualExam = () => {
+  const updateMaterial = async (lessonIdx: number, materialIdx: number, updates: Partial<Material>): Promise<void> => {
+    const lessons = [...(course.lessons || [])];
+    const lesson = lessons[lessonIdx];
+    if (!lesson) return;
+    
+    const materials = [...lesson.materials];
+    const currentMaterial = materials[materialIdx];
+    
+    if (!currentMaterial) return;
+    
+    const updatedMaterial = { ...currentMaterial, ...updates };
+    materials[materialIdx] = updatedMaterial;
+    
+    lessons[lessonIdx] = { ...lesson, materials };
+    setCourse({ ...course, lessons });
+    
+    // Save to database if lesson has an ID
+    if (lesson.id) {
+      try {
+        setSavingMaterial(updatedMaterial.id);
+        await saveMaterialToDatabase(lesson.id, updatedMaterial);
+      } catch (error) {
+        console.error('Failed to save material to database:', error);
+        alert(lang === 'en' ? 'Failed to save material to database' : 'Greška pri čuvanju materijala u bazi');
+      } finally {
+        setSavingMaterial(null);
+      }
+    }
+  };
+
+  const deleteMaterial = async (lessonIdx: number, materialId: string, materialUrl: string): Promise<void> => {
+    if (!confirm(lang === 'en' ? 'Are you sure you want to delete this material?' : 'Da li ste sigurni da želite da obrišete ovaj materijal?')) {
+      return;
+    }
+    
+    try {
+      setDeletingMaterial(materialId);
+      
+      // Delete from database if material has an ID
+      if (materialId) {
+        const { error } = await supabase
+          .from('materials')
+          .delete()
+          .eq('id', materialId);
+        
+        if (error) {
+          console.error('Error deleting material from database:', error);
+          alert(lang === 'en' ? 'Failed to delete material from database' : 'Greška pri brisanju materijala iz baze');
+          return;
+        }
+        console.log('Material deleted from database:', materialId);
+      }
+      
+      // Delete file from Supabase Storage if URL exists
+      if (materialUrl && isSupabaseStorageUrl(materialUrl)) {
+        const urlParts = materialUrl.split('/');
+        const filePath = urlParts.slice(urlParts.indexOf('materials') + 1).join('/');
+        
+        console.log('Deleting associated file from storage:', filePath);
+        
+        const { error: storageError } = await supabase.storage
+          .from('materials')
+          .remove([filePath]);
+        
+        if (storageError) {
+          console.warn('Failed to delete file from storage:', storageError);
+          // Continue with material deletion even if storage deletion fails
+        }
+      }
+      
+      // Delete material from local state
+      const lessons = [...(course.lessons || [])];
+      const lesson = lessons[lessonIdx];
+      if (!lesson) return;
+      
+      const materials = lesson.materials.filter(m => m.id !== materialId);
+      lessons[lessonIdx] = { ...lesson, materials };
+      setCourse({ ...course, lessons });
+      
+      alert(lang === 'en' ? 'Material deleted successfully!' : 'Materijal uspešno obrisan!');
+      
+    } catch (error) {
+      console.error('Error deleting material:', error);
+      alert(lang === 'en' ? 'Error deleting material' : 'Greška pri brisanju materijala');
+    } finally {
+      setDeletingMaterial(null);
+    }
+  };
+
+  const handleMaterialUploadComplete = async (
+    lessonIdx: number,
+    materialIdx: number,
+    url: string,
+    fileName: string,
+    fileType: 'pdf' | 'video' | 'pptx'
+  ): Promise<void> => {
+    const lessons = [...(course.lessons || [])];
+    const lesson = lessons[lessonIdx];
+    if (!lesson) return;
+    
+    const materials = [...lesson.materials];
+    const material = materials[materialIdx];
+    if (!material) return;
+    
+    // Extract clean filename without extension for display
+    const displayName = extractFileNameFromUrl(fileName);
+    
+    const updatedMaterial = {
+      ...material,
+      url,
+      title: material.title === `New ${material.type.toUpperCase()}` ? displayName : material.title || displayName
+    };
+    
+    materials[materialIdx] = updatedMaterial;
+    lessons[lessonIdx] = { ...lesson, materials };
+    setCourse({ ...course, lessons });
+    
+    // Save to database if lesson has an ID
+    if (lesson.id) {
+      try {
+        setSavingMaterial(updatedMaterial.id);
+        const savedMaterial = await saveMaterialToDatabase(lesson.id, updatedMaterial);
+        
+        // Update local state with database ID
+        const updatedLessons = [...(course.lessons || [])];
+        const updatedLesson = updatedLessons[lessonIdx];
+        if (updatedLesson) {
+          const updatedMaterials = [...updatedLesson.materials];
+          updatedMaterials[materialIdx] = savedMaterial;
+          updatedLessons[lessonIdx] = { ...updatedLesson, materials: updatedMaterials };
+          setCourse({ ...course, lessons: updatedLessons });
+        }
+      } catch (error) {
+        console.error('Failed to save material to database:', error);
+        alert(lang === 'en' ? 'File uploaded but failed to save to database' : 'Fajl je uploadovan ali greška pri čuvanju u bazi');
+      } finally {
+        setSavingMaterial(null);
+      }
+    }
+  };
+
+  const handleDeleteFile = async (url: string, materialId: string): Promise<void> => {
+    if (!url || !isSupabaseStorageUrl(url)) {
+      alert(lang === 'en' ? 'Cannot delete this file. It is not stored in Supabase Storage.' : 'Ne mogu obrisati ovaj fajl. Nije sačuvan u Supabase Storage-u.');
+      return;
+    }
+    
+    if (!confirm(lang === 'en' ? 'Are you sure you want to delete this file from storage?' : 'Da li ste sigurni da želite da obrišete ovaj fajl iz skladišta?')) {
+      return;
+    }
+    
+    try {
+      setDeletingFile(url);
+      
+      // Extract file path from URL
+      const urlParts = url.split('/');
+      const filePath = urlParts.slice(urlParts.indexOf('materials') + 1).join('/');
+      
+      console.log('Deleting file from Supabase Storage:', filePath);
+      
+      // Delete from Supabase Storage
+      const { error: storageError } = await supabase.storage
+        .from('materials')
+        .remove([filePath]);
+      
+      if (storageError) {
+        console.error('Error deleting file from storage:', storageError);
+        alert(lang === 'en' ? 'Failed to delete file from storage' : 'Greška pri brisanju fajla iz skladišta');
+        return;
+      }
+      
+      // Update material in database to remove URL
+      if (materialId) {
+        const { error } = await supabase
+          .from('materials')
+          .update({ url: null, updated_at: new Date().toISOString() })
+          .eq('id', materialId);
+        
+        if (error) {
+          console.error('Error updating material in database:', error);
+        }
+      }
+      
+      // Remove URL from the specific material in local state
+      const updatedLessons = [...(course.lessons || [])].map(lesson => ({
+        ...lesson,
+        materials: lesson.materials.map(mat => 
+          mat.id === materialId ? { ...mat, url: '' } : mat
+        )
+      }));
+      
+      setCourse({ ...course, lessons: updatedLessons });
+      
+      alert(lang === 'en' ? 'File deleted successfully from storage!' : 'Fajl uspešno obrisan iz skladišta!');
+      
+    } catch (error) {
+      console.error('Error deleting file:', error);
+      alert(lang === 'en' ? 'Error deleting file' : 'Greška pri brisanju fajla');
+    } finally {
+      setDeletingFile(null);
+    }
+  };
+
+  const handleManualExam = (): void => {
     setCourse({
       ...course,
       exam: {
-        id: '', // Prazan string - biće generisan od Supabase-a
+        id: '',
         courseId: course.id || '',
         passingScore: 80,
         timeLimitMinutes: 20,
@@ -267,7 +629,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
     });
   };
 
-  const handleGenerateExam = async () => {
+  const handleGenerateExam = async (): Promise<void> => {
     if (!course.title || !course.description) {
       alert(lang === 'en' ? 'Please provide a title and description first.' : 'Molimo unesite naslov i opis prvo.');
       return;
@@ -279,7 +641,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
       setCourse({
         ...course,
         exam: {
-          id: '', // Prazan string - biće generisan od Supabase-a
+          id: '',
           courseId: course.id || '',
           passingScore: 80,
           timeLimitMinutes: 20,
@@ -298,7 +660,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
     }
   };
 
-  const handleAddQuestion = () => {
+  const handleAddQuestion = (): void => {
     if (!course.exam) return;
     
     if (!newQuestion.text?.trim()) {
@@ -306,7 +668,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
       return;
     }
     
-    // Proveri da li sve opcije imaju tekst
+    // Check if all options have text
     const emptyOptions = newQuestion.options?.some(opt => !opt.trim());
     if (emptyOptions) {
       alert(lang === 'en' ? 'All options must have text' : 'Sve opcije moraju imati tekst');
@@ -314,7 +676,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
     }
     
     const q: Question = {
-      id: '', // Prazan string - biće generisan od Supabase-a
+      id: '',
       text: newQuestion.text.trim(),
       options: newQuestion.options!.map(opt => opt.trim()),
       correctOptionIndex: newQuestion.correctOptionIndex || 0
@@ -332,7 +694,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
     setNewQuestion({ text: '', options: ['', '', '', ''], correctOptionIndex: 0 });
   };
 
-  const deleteQuestion = (qid: string) => {
+  const deleteQuestion = (qid: string): void => {
     if (!course.exam) return;
     
     setCourse({
@@ -344,7 +706,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
     });
   };
 
-  const updateQuestion = (qid: string, updates: Partial<Question>) => {
+  const updateQuestion = (qid: string, updates: Partial<Question>): void => {
     if (!course.exam) return;
     
     setCourse({
@@ -361,7 +723,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
   const inputStyles = "w-full px-4 py-3 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-600 outline-none text-slate-900 font-medium placeholder-slate-400 transition-all";
   const labelStyles = "block text-sm font-bold text-slate-800 mb-2";
 
-  const Tooltip = ({ title, text }: { title: string, text: string }) => (
+  const Tooltip: React.FC<{ title: string; text: string }> = ({ title, text }) => (
     <div className="group relative inline-block ml-1">
       <div className="w-4 h-4 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-[10px] font-black cursor-help">?</div>
       <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-3 bg-slate-900 text-white text-[10px] rounded-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all shadow-xl z-50 pointer-events-none">
@@ -398,7 +760,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
           </h1>
         </div>
         <button 
-          onClick={saveCourse} 
+          onClick={() => void saveCourse()} 
           disabled={isSaving}
           className="bg-green-600 hover:bg-green-700 text-white px-8 py-3 rounded-2xl font-bold shadow-lg transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
         >
@@ -417,7 +779,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                   <input 
                     type="text" 
                     value={course.title} 
-                    onChange={e => setCourse({...course, title: e.target.value})} 
+                    onChange={(e) => setCourse({...course, title: e.target.value})} 
                     className={inputStyles} 
                     placeholder="Course Title" 
                     required
@@ -428,7 +790,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                   <input 
                     type="text" 
                     value={course.version} 
-                    onChange={e => setCourse({...course, version: e.target.value})} 
+                    onChange={(e) => setCourse({...course, version: e.target.value})} 
                     className={inputStyles} 
                     placeholder="1.0.0" 
                   />
@@ -440,12 +802,12 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                   <label className={labelStyles}>{t.instructorAssigned} *</label>
                   <select 
                     value={course.instructorId} 
-                    onChange={e => setCourse({...course, instructorId: e.target.value})} 
+                    onChange={(e) => setCourse({...course, instructorId: e.target.value})} 
                     className={inputStyles}
                     required
                   >
                     <option value="">Select Instructor</option>
-                    {instructors.map(inst => (
+                    {instructors.map((inst) => (
                       <option key={inst.id} value={inst.id}>
                         {inst.name} ({inst.role})
                       </option>
@@ -461,11 +823,11 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                   <label className={labelStyles}>{t.refresherCourse}</label>
                   <select 
                     value={course.refresherCourseId || ''} 
-                    onChange={e => setCourse({...course, refresherCourseId: e.target.value || undefined})} 
+                    onChange={(e) => setCourse({...course, refresherCourseId: e.target.value || undefined})} 
                     className={inputStyles}
                   >
                     <option value="">None</option>
-                    {allCourses.filter(c => c.id !== id).map(c => (
+                    {allCourses.filter(c => c.id !== id).map((c) => (
                       <option key={c.id} value={c.id}>{c.title}</option>
                     ))}
                   </select>
@@ -477,7 +839,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                 <textarea 
                   rows={3} 
                   value={course.description} 
-                  onChange={e => setCourse({...course, description: e.target.value})} 
+                  onChange={(e) => setCourse({...course, description: e.target.value})} 
                   className={inputStyles} 
                   placeholder="Overview" 
                 />
@@ -488,7 +850,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                   <label className={labelStyles}>{t.category}</label>
                   <select 
                     value={course.category} 
-                    onChange={e => setCourse({...course, category: e.target.value as any})} 
+                    onChange={(e) => setCourse({...course, category: e.target.value as Course['category']})} 
                     className={inputStyles}
                   >
                     <option value="Safety">Safety</option>
@@ -501,7 +863,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                   <label className={labelStyles}>{t.validityYears}</label>
                   <select 
                     value={course.validityYears} 
-                    onChange={e => setCourse({...course, validityYears: parseInt(e.target.value) || 2})} 
+                    onChange={(e) => setCourse({...course, validityYears: parseInt(e.target.value) || 2})} 
                     className={inputStyles}
                   >
                     <option value={1}>1 Year</option>
@@ -515,7 +877,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                     <input 
                       type="checkbox" 
                       checked={course.requiresPracticalCheck} 
-                      onChange={e => setCourse({...course, requiresPracticalCheck: e.target.checked})} 
+                      onChange={(e) => setCourse({...course, requiresPracticalCheck: e.target.checked})} 
                       className="w-5 h-5 rounded text-blue-600" 
                     />
                     <span className="text-sm font-bold text-slate-700">{t.practicalCheck}</span>
@@ -531,6 +893,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
               <button 
                 onClick={addLesson} 
                 className="text-blue-600 font-bold flex items-center bg-blue-50 px-4 py-2 rounded-xl transition-all border border-blue-100 hover:bg-blue-100"
+                type="button"
               >
                 <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -552,6 +915,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                       <button 
                         onClick={() => deleteLesson(idx)} 
                         className="p-2 text-red-400 hover:bg-red-50 rounded-lg transition-colors"
+                        type="button"
                       >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -566,7 +930,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                           type="text" 
                           className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl outline-none font-bold text-slate-900" 
                           value={lesson.title} 
-                          onChange={e => updateLesson(idx, { title: e.target.value })} 
+                          onChange={(e) => updateLesson(idx, { title: e.target.value })} 
                           placeholder="Lesson Title"
                         />
                       </div>
@@ -577,7 +941,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                           min="0" 
                           className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl outline-none font-bold text-blue-600" 
                           value={lesson.minLearningTimeMinutes} 
-                          onChange={e => updateLesson(idx, { minLearningTimeMinutes: parseInt(e.target.value) || 0 })} 
+                          onChange={(e) => updateLesson(idx, { minLearningTimeMinutes: parseInt(e.target.value) || 0 })} 
                           placeholder="Minutes"
                         />
                       </div>
@@ -588,7 +952,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                       <textarea 
                         className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl outline-none text-slate-900 min-h-[60px]" 
                         value={lesson.description} 
-                        onChange={e => updateLesson(idx, { description: e.target.value })} 
+                        onChange={(e) => updateLesson(idx, { description: e.target.value })} 
                         placeholder="Lesson description..."
                       />
                     </div>
@@ -597,11 +961,12 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                       <div className="flex justify-between items-center">
                         <h4 className="text-sm font-bold text-slate-700">Materials ({lesson.materials.length})</h4>
                         <div className="flex gap-2">
-                          {['pdf', 'video', 'pptx', 'text'].map(type => (
+                          {(['pdf', 'video', 'pptx', 'text'] as const).map((type) => (
                             <button 
                               key={type} 
-                              onClick={() => addMaterial(idx, type as 'pdf' | 'video' | 'pptx' | 'text')} 
+                              onClick={() => addMaterial(idx, type)} 
                               className="bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-[10px] font-bold text-slate-600 hover:border-blue-300 hover:text-blue-600 transition-all uppercase"
+                              type="button"
                             >
                               + {type}
                             </button>
@@ -609,8 +974,10 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                         </div>
                       </div>
                       
-                      {lesson.materials.map((m) => {
-                        const mIdx = lesson.materials.findIndex(orig => orig.id === m.id);
+                      {lesson.materials.map((m, mIdx) => {
+                        const isSupabaseUrl = isSupabaseStorageUrl(m.url);
+                        const isSavingThis = savingMaterial === m.id;
+                        
                         return (
                           <div key={m.id || `material-${mIdx}`} className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm space-y-3">
                             <div className="flex items-center justify-between">
@@ -622,41 +989,151 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                               }`}>
                                 {m.type}
                               </span>
-                              <button 
-                                onClick={() => deleteMaterial(idx, m.id)} 
-                                className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg transition-colors"
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                              </button>
+                              <div className="flex gap-1">
+                                {isSavingThis && (
+                                  <div className="p-1.5">
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600" />
+                                  </div>
+                                )}
+                                {m.url && isSupabaseUrl && (
+                                  <button 
+                                    onClick={() => handleDeleteFile(m.url, m.id)}
+                                    disabled={deletingFile === m.url || deletingMaterial === m.id}
+                                    className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                                    title={lang === 'en' ? 'Delete file from storage' : 'Obriši fajl iz skladišta'}
+                                    type="button"
+                                  >
+                                    {deletingFile === m.url ? (
+                                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600" />
+                                    ) : (
+                                      <Trash2 className="w-4 h-4" />
+                                    )}
+                                  </button>
+                                )}
+                                <button 
+                                  onClick={() => deleteMaterial(idx, m.id, m.url)}
+                                  disabled={deletingMaterial === m.id || deletingFile === m.url}
+                                  className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                                  type="button"
+                                >
+                                  {deletingMaterial === m.id ? (
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600" />
+                                  ) : (
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                  )}
+                                </button>
+                              </div>
                             </div>
-                            <input 
-                              type="text" 
-                              className="w-full text-sm font-bold text-slate-900 border-b border-slate-100 focus:border-blue-200 outline-none pb-1" 
-                              value={m.title} 
-                              onChange={e => { 
-                                const materials = [...lesson.materials]; 
-                                materials[mIdx].title = e.target.value; 
-                                updateLesson(idx, { materials }); 
-                              }} 
-                              placeholder="Material Title" 
-                            />
-                            <input 
-                              type="text" 
-                              className="w-full text-xs text-slate-500 bg-slate-50 px-3 py-2 rounded-lg outline-none border border-slate-100" 
-                              value={m.type === 'text' ? m.content || '' : m.url} 
-                              onChange={e => { 
-                                const materials = [...lesson.materials]; 
-                                if (m.type === 'text') {
-                                  materials[mIdx].content = e.target.value;
-                                } else {
-                                  materials[mIdx].url = e.target.value;
-                                } 
-                                updateLesson(idx, { materials }); 
-                              }} 
-                              placeholder={m.type === 'text' ? "Content text..." : "URL Link"} 
-                            />
+                            
+                            <div className="relative">
+                              <input 
+                                type="text" 
+                                className="w-full text-sm font-bold text-slate-900 border-b border-slate-100 focus:border-blue-200 outline-none pb-1 pr-8" 
+                                value={m.title} 
+                                onChange={(e) => void updateMaterial(idx, mIdx, { title: e.target.value })} 
+                                placeholder="Material Title" 
+                              />
+                              {isSavingThis && (
+                                <div className="absolute right-0 top-0">
+                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600" />
+                                </div>
+                              )}
+                            </div>
+                            
+                            {m.type !== 'text' ? (
+                              <div className="space-y-2">
+                                {/* URL Input */}
+                                <div>
+                                  <label className="text-[10px] font-black uppercase text-slate-400 mb-1 px-1 block">
+                                    URL Link
+                                  </label>
+                                  <div className="flex gap-2">
+                                    <input 
+                                      type="text" 
+                                      className="flex-1 text-xs text-slate-500 bg-slate-50 px-3 py-2 rounded-lg outline-none border border-slate-100" 
+                                      value={m.url} 
+                                      onChange={(e) => void updateMaterial(idx, mIdx, { url: e.target.value })} 
+                                      placeholder="https://example.com/file.pdf" 
+                                    />
+                                    {m.url && (
+                                      <a
+                                        href={m.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="px-3 py-2 bg-blue-50 text-blue-700 rounded-lg text-xs font-medium hover:bg-blue-100 transition-colors flex items-center gap-1"
+                                      >
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                        </svg>
+                                        {lang === 'en' ? 'Open' : 'Otvori'}
+                                      </a>
+                                    )}
+                                  </div>
+                                </div>
+                                
+                                {/* OR Divider */}
+                                <div className="flex items-center gap-2 my-2">
+                                  <div className="flex-1 border-t border-slate-200"></div>
+                                  <span className="text-[10px] text-slate-400 font-bold">OR</span>
+                                  <div className="flex-1 border-t border-slate-200"></div>
+                                </div>
+                                
+                                {/* Upload Component */}
+                                <MaterialUpload
+                                  acceptedTypes={
+                                    m.type === 'pdf' ? '.pdf' :
+                                    m.type === 'video' ? '.mp4,.webm,.ogg,.mov,.avi,.wmv,.flv' :
+                                    '.ppt,.pptx'
+                                  }
+                                  onUploadComplete={(url, fileName, fileType) => {
+                                    void handleMaterialUploadComplete(idx, mIdx, url, fileName, fileType);
+                                  }}
+                                />
+                                
+                                {/* Success indicator */}
+                                {m.url && (
+                                  <div className="flex items-center justify-between gap-2 p-2 bg-green-50 border border-green-200 rounded text-xs text-green-700">
+                                    <div className="flex items-center gap-2">
+                                      <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                      </svg>
+                                      <span className="truncate">
+                                        {isSupabaseUrl 
+                                          ? `${lang === 'en' ? 'Uploaded to Supabase Storage' : 'Uploadovano na Supabase Storage'}: ${extractFileNameFromUrl(m.url)}`
+                                          : m.url.length > 40 
+                                            ? `...${m.url.slice(-40)}` 
+                                            : m.url}
+                                      </span>
+                                    </div>
+                                    {isSupabaseUrl && (
+                                      <button
+                                        onClick={() => navigator.clipboard.writeText(m.url)}
+                                        className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors"
+                                        title={lang === 'en' ? 'Copy URL' : 'Kopiraj URL'}
+                                        type="button"
+                                      >
+                                        {lang === 'en' ? 'Copy' : 'Kopiraj'}
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <textarea
+                                className="w-full text-xs text-slate-500 bg-slate-50 px-3 py-2 rounded-lg outline-none border border-slate-100 min-h-[80px]"
+                                value={m.content || ''} 
+                                onChange={(e) => void updateMaterial(idx, mIdx, { content: e.target.value })} 
+                                placeholder="Content text..." 
+                              />
+                            )}
+                            
+                            {m.id && (
+                              <div className="text-[10px] text-slate-400 italic">
+                                {lang === 'en' ? 'Saved in database' : 'Sačuvano u bazi podataka'}
+                              </div>
+                            )}
                           </div>
                         );
                       })}
@@ -680,6 +1157,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                   <button 
                     onClick={addLesson} 
                     className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-blue-700 transition-colors"
+                    type="button"
                   >
                     Add First Lesson
                   </button>
@@ -696,6 +1174,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                   <button 
                     onClick={() => setEditingQuestionId('new')} 
                     className="text-blue-600 font-bold bg-blue-50 px-4 py-2 rounded-xl border border-blue-100 hover:bg-blue-100 transition-colors"
+                    type="button"
                   >
                     {t.addQuestion}
                   </button>
@@ -714,7 +1193,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                     <label className={labelStyles}>Question Text *</label>
                     <textarea 
                       value={newQuestion.text} 
-                      onChange={e => setNewQuestion({...newQuestion, text: e.target.value})} 
+                      onChange={(e) => setNewQuestion({...newQuestion, text: e.target.value})} 
                       className={inputStyles} 
                       placeholder="Enter your question..." 
                       rows={2}
@@ -730,7 +1209,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                           <input 
                             type="text" 
                             value={opt} 
-                            onChange={e => { 
+                            onChange={(e) => { 
                               const opts = [...(newQuestion.options || [])]; 
                               opts[oIdx] = e.target.value; 
                               setNewQuestion({...newQuestion, options: opts}); 
@@ -745,6 +1224,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                               'bg-green-600 border-green-600 text-white' : 
                               'bg-white border-slate-200 text-slate-300 hover:border-green-400 hover:text-green-600'
                             }`}
+                            type="button"
                           >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
@@ -758,12 +1238,14 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                     <button 
                       onClick={handleAddQuestion} 
                       className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 transition-colors"
+                      type="button"
                     >
                       {t.saveQuestion}
                     </button>
                     <button 
                       onClick={() => setEditingQuestionId(null)} 
                       className="px-6 py-3 bg-slate-200 text-slate-500 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-300 transition-colors"
+                      type="button"
                     >
                       Cancel
                     </button>
@@ -786,7 +1268,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                       <textarea 
                         className="w-full font-bold text-slate-900 border-b border-slate-100 focus:border-blue-200 outline-none pb-1 mb-3" 
                         value={q.text} 
-                        onChange={e => updateQuestion(q.id, { text: e.target.value })}
+                        onChange={(e) => updateQuestion(q.id, { text: e.target.value })}
                         rows={2}
                       />
                       <div className="grid grid-cols-2 gap-2">
@@ -799,7 +1281,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                               type="text" 
                               className="w-full text-sm text-slate-700 bg-transparent outline-none" 
                               value={opt} 
-                              onChange={e => {
+                              onChange={(e) => {
                                 const options = [...q.options];
                                 options[oIdx] = e.target.value;
                                 updateQuestion(q.id, { options });
@@ -812,6 +1294,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                                   ? 'bg-green-600 text-white' 
                                   : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
                               }`}
+                              type="button"
                             >
                               {q.correctOptionIndex === oIdx ? 'Correct ✓' : 'Mark Correct'}
                             </button>
@@ -822,6 +1305,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                     <button 
                       onClick={() => deleteQuestion(q.id)} 
                       className="p-2 text-slate-300 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-all"
+                      type="button"
                     >
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -846,15 +1330,17 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
             {!course.exam ? (
               <div className="space-y-3">
                 <button 
-                  onClick={handleGenerateExam} 
+                  onClick={() => void handleGenerateExam()} 
                   disabled={loadingAI || !course.title || !course.description} 
                   className="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  type="button"
                 >
                   {loadingAI ? t.generating : t.aiGenerate}
                 </button>
                 <button 
                   onClick={handleManualExam} 
                   className="w-full py-4 bg-slate-50 text-slate-600 rounded-2xl font-bold border border-slate-200 hover:bg-slate-100 transition-all active:scale-95 text-xs uppercase tracking-widest"
+                  type="button"
                 >
                   {t.manualSetup}
                 </button>
@@ -875,7 +1361,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                     type="number" 
                     min="1" 
                     value={course.exam.timeLimitMinutes} 
-                    onChange={e => setCourse({
+                    onChange={(e) => setCourse({
                       ...course, 
                       exam: {...course.exam!, timeLimitMinutes: parseInt(e.target.value) || 1}
                     })} 
@@ -892,7 +1378,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                     min="1" 
                     max="100" 
                     value={course.exam.passingScore} 
-                    onChange={e => setCourse({
+                    onChange={(e) => setCourse({
                       ...course, 
                       exam: {...course.exam!, passingScore: parseInt(e.target.value) || 80}
                     })} 
@@ -906,13 +1392,13 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                   </label>
                   <select 
                     value={course.exam.maxAttempts} 
-                    onChange={e => setCourse({
+                    onChange={(e) => setCourse({
                       ...course, 
                       exam: {...course.exam!, maxAttempts: parseInt(e.target.value)}
                     })} 
                     className={inputStyles}
                   >
-                    {[1, 2, 3, 4, 5, 10].map(v => (
+                    {[1, 2, 3, 4, 5, 10].map((v) => (
                       <option key={v} value={v}>{v}</option>
                     ))}
                   </select>
@@ -926,7 +1412,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                     type="number" 
                     min="0" 
                     value={course.exam.questionBankDrawCount || 0} 
-                    onChange={e => setCourse({
+                    onChange={(e) => setCourse({
                       ...course, 
                       exam: {...course.exam!, questionBankDrawCount: parseInt(e.target.value) || 0}
                     })} 
@@ -938,7 +1424,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                     <input 
                       type="checkbox" 
                       checked={course.exam.randomizeQuestions} 
-                      onChange={e => setCourse({
+                      onChange={(e) => setCourse({
                         ...course, 
                         exam: {...course.exam!, randomizeQuestions: e.target.checked}
                       })} 
@@ -950,7 +1436,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                     <input 
                       type="checkbox" 
                       checked={course.exam.randomizeAnswers} 
-                      onChange={e => setCourse({
+                      onChange={(e) => setCourse({
                         ...course, 
                         exam: {...course.exam!, randomizeAnswers: e.target.checked}
                       })} 
@@ -962,6 +1448,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                 <button 
                   onClick={() => setCourse({...course, exam: undefined})} 
                   className="w-full py-3 bg-red-50 text-red-600 rounded-xl text-[10px] font-black uppercase tracking-widest border border-red-100 hover:bg-red-100 transition-all"
+                  type="button"
                 >
                   Delete Exam Module
                 </button>
@@ -975,7 +1462,7 @@ const CourseEditor: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
               <div className="flex justify-between items-center">
                 <span className="text-sm text-slate-600">ID:</span>
                 <span className="text-xs font-mono bg-slate-100 px-2 py-1 rounded">
-                  {course.id ? course.id.slice(0, 8) + '...' : 'Not saved yet'}
+                  {course.id ? `${course.id.slice(0, 8)}...` : 'Not saved yet'}
                 </span>
               </div>
               <div className="flex justify-between items-center">

@@ -215,7 +215,7 @@ const CourseDetail: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
         
         <div className="bg-white rounded-2xl p-8 text-center shadow-sm border border-slate-100">
           <div className="text-6xl mb-4">🔍</div>
-          <h2 className="text-2xl font-black text-slate-900 mb-2">Course Not Found</h2>
+          <h2 className="text-2xl  text-slate-900 mb-2">Course Not Found</h2>
           <p className="text-slate-600 mb-4">{error}</p>
           <button
             onClick={() => navigate('/dashboard')}
@@ -273,14 +273,14 @@ const CourseDetail: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
           <div className="absolute inset-0 bg-gradient-to-t from-slate-950 to-transparent flex items-end p-6 sm:p-10">
             <div>
               <div className="flex gap-2 mb-3">
-                <span className="px-3 py-1 bg-blue-600 rounded-full text-[10px] sm:text-xs font-black text-white shadow-xl">
+                <span className="px-3 py-1 bg-blue-600 rounded-full text-[10px] sm:text-xs  text-white shadow-xl">
                   {course.category}
                 </span>
-                <span className="px-3 py-1 bg-white/20 backdrop-blur rounded-full text-[10px] sm:text-xs font-black text-white border border-white/20">
+                <span className="px-3 py-1 bg-white/20 backdrop-blur rounded-full text-[10px] sm:text-xs  text-white border border-white/20">
                   v{course.version}
                 </span>
               </div>
-              <h1 className="text-2xl sm:text-4xl font-black text-white tracking-tighter leading-tight">
+              <h1 className="text-2xl sm:text-4xl  text-white tracking-tighter leading-tight">
                 {course.title}
               </h1>
               {course.id && (
@@ -296,7 +296,7 @@ const CourseDetail: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 sm:gap-12">
             <div className="lg:col-span-2 order-2 lg:order-1">
               <div className="mb-8 sm:mb-10">
-                <h2 className="text-xl sm:text-2xl font-black text-slate-900 mb-4">
+                <h2 className="text-xl sm:text-2xl  text-slate-900 mb-4">
                   {t.courseOverview || 'Course Overview'}
                 </h2>
                 <p className="text-slate-600 leading-relaxed text-base sm:text-lg">
@@ -306,15 +306,15 @@ const CourseDetail: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
 
               {instructor && (
                 <div className="mb-8 sm:mb-10 p-6 bg-slate-50 rounded-3xl border border-slate-100">
-                  <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-4">
+                  <h3 className="text-sm  text-slate-400 uppercase tracking-widest mb-4">
                     {t.instructorDetails || 'Instructor Details'}
                   </h3>
                   <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-2xl bg-slate-900 flex items-center justify-center font-black text-white shadow-lg">
+                    <div className="w-12 h-12 rounded-2xl bg-slate-900 flex items-center justify-center  text-white shadow-lg">
                       {instructor.name.charAt(0)}
                     </div>
                     <div>
-                      <p className="font-black text-slate-900">{instructor.name}</p>
+                      <p className=" text-slate-900">{instructor.name}</p>
                       <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
                         <p className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
                           {t.authScope || 'Authorization Scope'}:{' '}
@@ -345,14 +345,14 @@ const CourseDetail: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                     ? 'bg-green-50 border-green-100 shadow-inner' 
                     : 'bg-amber-50 border-amber-100 shadow-sm'
                 }`}>
-                  <h3 className="font-black text-lg text-slate-900 mb-3">
+                  <h3 className=" text-lg text-slate-900 mb-3">
                     {t.practicalCheck || 'Practical Check'}
                   </h3>
                   
                   {progress?.practicalCheckCompleted ? (
                     <div className="space-y-3">
                       <div className="flex items-center gap-2">
-                        <span className="px-2 py-1 bg-green-600 text-white rounded-lg text-[10px] font-black uppercase tracking-widest">
+                        <span className="px-2 py-1 bg-green-600 text-white rounded-lg text-[10px]  uppercase tracking-widest">
                           {t.competent || 'COMPETENT'}
                         </span>
                         <p className="text-xs sm:text-sm text-slate-600 font-bold">
@@ -380,7 +380,7 @@ const CourseDetail: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                           <div className="flex gap-4">
                             <button 
                               onClick={() => setPracticalStatus('COMPETENT')} 
-                              className={`flex-1 py-3 rounded-xl border-2 font-black text-[10px] uppercase tracking-widest transition-all ${
+                              className={`flex-1 py-3 rounded-xl border-2  text-[10px] uppercase tracking-widest transition-all ${
                                 practicalStatus === 'COMPETENT' 
                                   ? 'bg-green-600 border-green-600 text-white shadow-lg' 
                                   : 'bg-white border-slate-200 text-slate-400 hover:border-green-400'
@@ -390,7 +390,7 @@ const CourseDetail: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                             </button>
                             <button 
                               onClick={() => setPracticalStatus('NOT_YET_COMPETENT')} 
-                              className={`flex-1 py-3 rounded-xl border-2 font-black text-[10px] uppercase tracking-widest transition-all ${
+                              className={`flex-1 py-3 rounded-xl border-2  text-[10px] uppercase tracking-widest transition-all ${
                                 practicalStatus === 'NOT_YET_COMPETENT' 
                                   ? 'bg-red-600 border-red-600 text-white shadow-lg' 
                                   : 'bg-white border-slate-200 text-slate-400 hover:border-red-400'
@@ -401,7 +401,7 @@ const CourseDetail: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                           </div>
                           
                           <div>
-                            <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 px-1">
+                            <label className="block text-[10px]  uppercase text-slate-400 mb-2 px-1">
                               {t.mentorComment || 'Mentor Comment'}
                             </label>
                             <textarea 
@@ -415,7 +415,7 @@ const CourseDetail: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
 
                           <button 
                             onClick={confirmPracticalCheck} 
-                            className="w-full py-3 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:scale-[1.02] transition-all shadow-xl shadow-slate-900/10"
+                            className="w-full py-3 bg-slate-900 text-white rounded-xl text-xs  uppercase tracking-widest hover:scale-[1.02] transition-all shadow-xl shadow-slate-900/10"
                           >
                             {t.confirmPractical || 'Confirm Practical Check'}
                           </button>
@@ -426,7 +426,7 @@ const CourseDetail: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                 </div>
               )}
 
-              <h2 className="text-xl sm:text-2xl font-black text-slate-900 mb-6">
+              <h2 className="text-xl sm:text-2xl  text-slate-900 mb-6">
                 {t.lessons || 'Lessons'} ({course.lessons.length})
               </h2>
               {course.lessons.length === 0 ? (
@@ -447,7 +447,7 @@ const CourseDetail: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                             : 'bg-white border-slate-100 hover:border-blue-300 shadow-sm'
                         }`}
                       >
-                        <span className={`w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center font-black mr-4 sm:mr-5 shrink-0 text-sm transition-colors ${
+                        <span className={`w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center  mr-4 sm:mr-5 shrink-0 text-sm transition-colors ${
                           isCompleted 
                             ? 'bg-green-600 text-white shadow-lg shadow-green-600/20' 
                             : 'bg-slate-100 text-slate-900 group-hover:bg-blue-600 group-hover:text-white shadow-sm'
@@ -457,11 +457,11 @@ const CourseDetail: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                         <div className="flex-1 min-w-0">
                           <h4 className="font-bold text-slate-900 truncate">{lesson.title}</h4>
                           <div className="flex gap-3 items-center mt-1">
-                            <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest">
+                            <p className="text-[10px] text-slate-400 uppercase  tracking-widest">
                               {lesson.materials.length} {t.learningMaterials || 'learning materials'}
                             </p>
                             {lesson.minLearningTimeMinutes > 0 && (
-                              <p className="text-[10px] text-blue-500 uppercase font-black tracking-widest">
+                              <p className="text-[10px] text-blue-500 uppercase  tracking-widest">
                                 ⏱ {lesson.minLearningTimeMinutes}m min
                               </p>
                             )}
@@ -489,13 +489,13 @@ const CourseDetail: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
 
             <div className="order-1 lg:order-2">
               <div className="bg-slate-900 p-6 sm:p-8 rounded-2xl sm:rounded-[2.5rem] text-white shadow-2xl lg:sticky lg:top-8">
-                <h3 className="font-black text-lg sm:text-xl mb-6 tracking-tight uppercase underline decoration-blue-500 decoration-4 underline-offset-8">
+                <h3 className=" text-lg sm:text-xl mb-6 tracking-tight uppercase underline decoration-blue-500 decoration-4 underline-offset-8">
                   {t.completionStatus || 'Completion Status'}
                 </h3>
                 
                 <div className="space-y-6">
                   <div>
-                    <div className="flex justify-between text-[10px] font-black uppercase tracking-widest mb-2 opacity-60">
+                    <div className="flex justify-between text-[10px]  uppercase tracking-widest mb-2 opacity-60">
                       <span>{t.progress || 'Progress'}</span>
                       <span>{progressPercentage}%</span>
                     </div>
@@ -511,10 +511,10 @@ const CourseDetail: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                   </div>
 
                   <div className="bg-white/5 p-4 sm:p-5 rounded-2xl border border-white/10">
-                    <p className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1">
+                    <p className="text-[10px]  uppercase tracking-widest opacity-40 mb-1">
                       {t.attemptsRemaining || 'Attempts Remaining'}
                     </p>
-                    <p className="text-xl sm:text-2xl font-black">
+                    <p className="text-xl sm:text-2xl ">
                       {maxAttempts - attemptsTaken} <span className="text-xs font-medium opacity-40">/ {maxAttempts}</span>
                     </p>
                     {attemptsTaken > 0 && (
@@ -529,7 +529,7 @@ const CourseDetail: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                       <>
                         <button 
                           onClick={() => navigate(`/certificate/${course.id}`)} 
-                          className="w-full py-4 sm:py-5 bg-green-500 text-white rounded-[1.5rem] font-black shadow-xl hover:bg-green-600 transition-all active:scale-95 flex items-center justify-center gap-2"
+                          className="w-full py-4 sm:py-5 bg-green-500 text-white rounded-[1.5rem]  shadow-xl hover:bg-green-600 transition-all active:scale-95 flex items-center justify-center gap-2"
                         >
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -538,7 +538,7 @@ const CourseDetail: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                         </button>
                         <button 
                           onClick={() => navigate(`/training-record/${course.id}`)} 
-                          className="w-full py-4 sm:py-5 bg-white/10 text-white rounded-[1.5rem] font-black shadow-xl hover:bg-white/20 transition-all active:scale-95 text-sm uppercase tracking-widest"
+                          className="w-full py-4 sm:py-5 bg-white/10 text-white rounded-[1.5rem]  shadow-xl hover:bg-white/20 transition-all active:scale-95 text-sm uppercase tracking-widest"
                         >
                           {t.viewTrainingRecord || 'View Training Record'}
                         </button>
@@ -551,7 +551,7 @@ const CourseDetail: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                       <button 
                         disabled={!allLessonsCompleted} 
                         onClick={handleStartExam} 
-                        className={`w-full py-4 sm:py-5 rounded-[1.5rem] font-black shadow-xl transition-all active:scale-95 ${
+                        className={`w-full py-4 sm:py-5 rounded-[1.5rem]  shadow-xl transition-all active:scale-95 ${
                           allLessonsCompleted 
                             ? 'bg-blue-600 hover:bg-blue-700' 
                             : 'bg-white/5 text-white/20 cursor-not-allowed'
@@ -564,7 +564,7 @@ const CourseDetail: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                     {attemptsTaken > 0 && !progress?.isCompleted && (
                       <button 
                         onClick={handleReviewLatest} 
-                        className="w-full py-3 bg-white/5 text-slate-400 rounded-[1rem] font-black text-[10px] uppercase tracking-widest hover:bg-white/10 transition-all"
+                        className="w-full py-3 bg-white/5 text-slate-400 rounded-[1rem]  text-[10px] uppercase tracking-widest hover:bg-white/10 transition-all"
                       >
                         {t.latestAttemptReview || 'Review Latest Attempt'}
                       </button>
