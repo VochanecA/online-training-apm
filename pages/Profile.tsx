@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, UserRole } from '../types';
 import { db } from '../db';
 import { Language, translations } from '../translations';
@@ -11,19 +10,57 @@ const Profile: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => {
   const [loading, setLoading] = useState(false);
   const [editedUser, setEditedUser] = useState<User>({ ...user });
   const [showSuccess, setShowSuccess] = useState(false);
+  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'activity'>('profile');
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+
+  useEffect(() => {
+    const loadAuditLogs = async () => {
+      if (activeTab === 'activity') {
+        try {
+          setLoadingLogs(true);
+          const logs = await db.getAuditLogs();
+          setAuditLogs(logs);
+        } catch (error) {
+          console.error('Error loading audit logs:', error);
+        } finally {
+          setLoadingLogs(false);
+        }
+      }
+    };
+
+    loadAuditLogs();
+  }, [activeTab]);
 
   const getRoleBadge = (role: UserRole) => {
     switch (role) {
-      case UserRole.ADMIN: return { color: 'bg-red-50 text-red-600 border-red-100', desc: t.roleAdminDesc };
-      case UserRole.INSTRUCTOR: return { color: 'bg-blue-50 text-blue-600 border-blue-100', desc: t.roleInstructorDesc };
-      case UserRole.INSPECTOR: return { color: 'bg-purple-50 text-purple-600 border-purple-100', desc: t.roleInspectorDesc };
-      default: return { color: 'bg-emerald-50 text-emerald-600 border-emerald-100', desc: t.roleTraineeDesc };
+      case UserRole.ADMIN: return { 
+        color: 'bg-gradient-to-r from-red-50 to-rose-50 text-red-700 border border-red-200',
+        icon: '👑',
+        desc: t.roleAdminDesc 
+      };
+      case UserRole.INSTRUCTOR: return { 
+        color: 'bg-gradient-to-r from-blue-50 to-cyan-50 text-blue-700 border border-blue-200',
+        icon: '🎓',
+        desc: t.roleInstructorDesc 
+      };
+      case UserRole.INSPECTOR: return { 
+        color: 'bg-gradient-to-r from-purple-50 to-violet-50 text-purple-700 border border-purple-200',
+        icon: '🔍',
+        desc: t.roleInspectorDesc 
+      };
+      default: return { 
+        color: 'bg-gradient-to-r from-emerald-50 to-green-50 text-emerald-700 border border-emerald-200',
+        icon: '👨‍✈️',
+        desc: t.roleTraineeDesc 
+      };
     }
   };
 
   const handleSave = async () => {
     setLoading(true);
     try {
+      // Update user in Supabase auth metadata
       const { error: supabaseError } = await supabase.auth.updateUser({
         data: {
           full_name: editedUser.name,
@@ -31,22 +68,34 @@ const Profile: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => {
           department: editedUser.department,
           airport: editedUser.airport,
           phone: editedUser.phone,
-          job_description: editedUser.jobDescription
+          job_description: editedUser.jobDescription,
+          instructor_scope: editedUser.instructorScope,
+          instructor_auth_expiry: editedUser.instructorAuthExpiry,
+          staff_id: editedUser.staffId
         }
       });
-      if (supabaseError) throw supabaseError;
+      
+      if (supabaseError) {
+        console.error('Supabase auth update error:', supabaseError);
+        throw new Error(lang === 'en' ? 'Failed to update profile in authentication system' : 'Greška pri ažuriranju profila u sistemu autentifikacije');
+      }
 
+      // Update user in local storage for backward compatibility
       db.updateUser(editedUser);
-      db.logAction(user.id, 'PROFILE_UPDATE', `Updated personal profile details.`);
+      
+      // Log the action in Supabase
+      await db.logAction(user.id, 'PROFILE_UPDATE', 'Updated personal profile details.');
 
       setShowSuccess(true);
       setTimeout(() => {
         setShowSuccess(false);
         setIsEditing(false);
-        window.location.reload(); 
+        // Instead of reloading the page, update the parent component
+        window.dispatchEvent(new Event('user-updated'));
       }, 1500);
     } catch (err: any) {
-      alert("Error: " + err.message);
+      console.error('Profile update error:', err);
+      alert(lang === 'en' ? `Error: ${err.message}` : `Greška: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -54,197 +103,594 @@ const Profile: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => {
 
   const currentRole = getRoleBadge(user.role);
 
-  return (
-    <div className="max-w-6xl mx-auto animate-in fade-in duration-700 pb-20">
-      <header className="mb-12 flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
-        <div>
-          <div className="inline-flex items-center px-4 py-1.5 bg-blue-50 text-blue-600 rounded-full text-[10px] font-black uppercase tracking-[0.2em] mb-4 border border-blue-100 shadow-sm">
-            Personnel Information File
-          </div>
-          <h1 className="text-5xl font-black text-slate-900 tracking-tighter leading-tight">Professional Profile</h1>
-          <p className="text-slate-500 mt-2 font-medium text-lg">Manage your digital training identity and authorization credentials.</p>
-        </div>
-        {!isEditing && (
-          <button 
-            onClick={() => setIsEditing(true)}
-            className="px-10 py-4 bg-slate-900 text-white rounded-[1.5rem] font-black text-xs uppercase tracking-widest hover:bg-black transition-all shadow-2xl shadow-slate-900/10 active:scale-95 flex items-center gap-3"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-            Edit Account
-          </button>
-        )}
-      </header>
+  const handleSecurityAction = async (action: string) => {
+    switch (action) {
+      case 'change-password':
+        // Reset password flow
+        const email = user.email;
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/reset-password`,
+        });
+        
+        if (error) {
+          alert(lang === 'en' ? 'Error sending reset email' : 'Greška pri slanju email-a za resetovanje');
+        } else {
+          alert(lang === 'en' ? 'Check your email for password reset instructions' : 'Proverite vaš email za uputstva za resetovanje lozinke');
+        }
+        break;
+        
+      case 'delete-account':
+        if (confirm(lang === 'en' 
+          ? 'Are you sure you want to delete your account? This action cannot be undone.'
+          : 'Da li ste sigurni da želite da obrišete svoj nalog? Ova radnja se ne može poništiti.')) {
+          // In a real app, you would call an API to delete the account
+          alert(lang === 'en' 
+            ? 'Account deletion has been requested. Please contact your administrator.'
+            : 'Zahtev za brisanje naloga je poslat. Molimo kontaktirajte administratora.');
+        }
+        break;
+        
+      default:
+        break;
+    }
+  };
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-        {/* Left Column: Core Identity Card */}
-        <div className="lg:col-span-4">
-          <div className="bg-white rounded-[3.5rem] shadow-2xl shadow-slate-200/50 border border-slate-100 overflow-hidden sticky top-8">
-            <div className="h-32 bg-slate-900 relative overflow-hidden">
-               <div className="absolute inset-0 bg-blue-600 opacity-20 blur-[60px] translate-x-1/2 -translate-y-1/2"></div>
-               <div className="absolute inset-0 bg-indigo-900 opacity-20 blur-[60px] -translate-x-1/2 translate-y-1/2"></div>
+  return (
+    <div className="max-w-7xl mx-auto animate-fade-in pb-8">
+      {/* Header */}
+      <div className="mb-8">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-2 h-8 bg-gradient-to-b from-blue-600 to-cyan-600 rounded-full"></div>
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
+                {t.myProfile || 'My Profile'}
+              </h1>
             </div>
-            <div className="px-10 pb-12 -mt-16 relative">
-              <div className="w-32 h-32 rounded-[3rem] bg-white p-2 shadow-2xl mx-auto mb-6">
-                <div className="w-full h-full rounded-[2.5rem] bg-slate-900 flex items-center justify-center text-4xl font-black text-white relative overflow-hidden group">
+            <p className="text-gray-600 text-sm md:text-base">
+              {t.manageProfile || 'Manage your personal information and account settings'}
+            </p>
+          </div>
+          
+          {!isEditing && (
+            <button 
+              onClick={() => setIsEditing(true)}
+              className="px-6 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-xl font-medium hover:shadow-lg transition-all flex items-center gap-2 group self-start lg:self-auto"
+            >
+              <svg className="w-5 h-5 group-hover:rotate-12 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              {t.editProfile || 'Edit Profile'}
+            </button>
+          )}
+        </div>
+
+        {/* Tabs */}
+        <div className="mt-8 flex gap-1 bg-gray-100 p-1 rounded-xl">
+          <button 
+            onClick={() => setActiveTab('profile')}
+            className={`px-6 py-3 rounded-lg text-sm font-medium transition-all duration-300 ${
+              activeTab === 'profile' 
+                ? 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-md' 
+                : 'text-gray-600 hover:text-gray-900 hover:bg-white'
+            }`}
+          >
+            {t.profileTab || 'Profile'}
+          </button>
+          <button 
+            onClick={() => setActiveTab('security')}
+            className={`px-6 py-3 rounded-lg text-sm font-medium transition-all duration-300 ${
+              activeTab === 'security' 
+                ? 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-md' 
+                : 'text-gray-600 hover:text-gray-900 hover:bg-white'
+            }`}
+          >
+            {t.securityTab || 'Security'}
+          </button>
+          <button 
+            onClick={() => setActiveTab('activity')}
+            className={`px-6 py-3 rounded-lg text-sm font-medium transition-all duration-300 ${
+              activeTab === 'activity' 
+                ? 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-md' 
+                : 'text-gray-600 hover:text-gray-900 hover:bg-white'
+            }`}
+          >
+            {t.activityTab || 'Activity'}
+          </button>
+        </div>
+      </div>
+
+      {/* Success Toast */}
+      {showSuccess && (
+        <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 z-50 animate-slide-up">
+          <div className="bg-gradient-to-r from-green-500 to-emerald-500 text-white px-6 py-4 rounded-xl shadow-lg flex items-center gap-3">
+            <div className="w-6 h-6 bg-white/20 rounded-full flex items-center justify-center">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <span className="font-medium">
+              {t.profileUpdatedSuccess || 'Profile updated successfully!'}
+            </span>
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Left Column - Profile Card */}
+        <div className="lg:col-span-4">
+          <div className="bg-gradient-to-br from-white to-gray-50 rounded-2xl border border-gray-200 shadow-sm p-6 sticky top-6">
+            {/* Profile Header */}
+            <div className="flex flex-col items-center text-center mb-8">
+              <div className="relative mb-6">
+                <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-2xl blur opacity-30"></div>
+                <div className="relative w-24 h-24 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-2xl flex items-center justify-center text-white text-3xl font-bold">
                   {user.name.charAt(0)}
                 </div>
               </div>
               
-              <div className="text-center space-y-2 mb-10">
-                <h2 className="text-3xl font-black text-slate-900 tracking-tight">{user.name}</h2>
-                <p className="text-slate-400 font-bold font-mono text-sm">{user.email}</p>
-                <div className="flex justify-center pt-4">
-                  <span className={`px-5 py-2 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] border ${currentRole.color}`}>
-                    {user.role}
-                  </span>
+              <h2 className="text-xl font-bold text-gray-900 mb-1">{user.name}</h2>
+              <p className="text-gray-600 text-sm mb-4">{user.email}</p>
+              
+              <div className={`px-4 py-2 rounded-full ${currentRole.color} flex items-center gap-2 mb-6`}>
+                <span>{currentRole.icon}</span>
+                <span className="font-medium text-sm">{user.role}</span>
+              </div>
+            </div>
+
+            {/* Stats */}
+            <div className="space-y-4 mb-8">
+              <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-gray-500">
+                      {t.trainingStatus || 'Training Status'}
+                    </p>
+                    <p className="text-lg font-bold text-gray-900">
+                      {t.verifiedStatus || 'Verified'}
+                    </p>
+                  </div>
+                  <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center">
+                    <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
                 </div>
               </div>
 
-              <div className="space-y-4 pt-8 border-t border-slate-50">
-                <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 shadow-inner">
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Training Status</span>
-                  <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest flex items-center gap-2">
-                    <span className="w-2 h-2 bg-emerald-500 rounded-full"></span>
-                    Verified
-                  </span>
-                </div>
-                <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 shadow-inner">
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Auth Scope</span>
-                  <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Full Access</span>
+              <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-gray-500">
+                      {t.accountType || 'Account Type'}
+                    </p>
+                    <p className="text-lg font-bold text-gray-900">
+                      {t.professionalAccount || 'Professional'}
+                    </p>
+                  </div>
+                  <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
+                    <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                  </div>
                 </div>
               </div>
+            </div>
+
+            {/* Role Description */}
+            <div className="p-4 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl border border-blue-200">
+              <p className="text-sm text-gray-700 font-medium">{currentRole.desc}</p>
             </div>
           </div>
         </div>
 
-        {/* Right Column: Detailed Info / Form */}
+        {/* Right Column - Content */}
         <div className="lg:col-span-8">
           {isEditing ? (
-            <div className="bg-white rounded-[4rem] p-12 shadow-2xl shadow-slate-200/50 border border-slate-100 animate-in slide-in-from-bottom-10 duration-500">
-               <h3 className="text-2xl font-black text-slate-900 mb-10 tracking-tight">Identity Settings</h3>
-               <form onSubmit={(e) => { e.preventDefault(); handleSave(); }} className="space-y-8">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] px-1">Display Name</label>
-                      <input type="text" value={editedUser.name} onChange={e => setEditedUser({...editedUser, name: e.target.value})} className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-blue-600/10 focus:border-blue-600 font-bold transition-all" />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] px-1">Job Title</label>
-                      <input type="text" value={editedUser.jobTitle || ''} onChange={e => setEditedUser({...editedUser, jobTitle: e.target.value})} className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-blue-600/10 focus:border-blue-600 font-bold transition-all" placeholder="e.g. Senior Technician" />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] px-1">Department</label>
-                      <input type="text" value={editedUser.department || ''} onChange={e => setEditedUser({...editedUser, department: e.target.value})} className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-blue-600/10 focus:border-blue-600 font-bold transition-all" placeholder="e.g. Ground Ops" />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] px-1">Primary Airport</label>
-                      <input type="text" value={editedUser.airport || ''} onChange={e => setEditedUser({...editedUser, airport: e.target.value})} className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-blue-600/10 focus:border-blue-600 font-bold transition-all" placeholder="e.g. TGD / Podgorica" />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] px-1">Contact Phone</label>
-                      <input type="tel" value={editedUser.phone || ''} onChange={e => setEditedUser({...editedUser, phone: e.target.value})} className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-blue-600/10 focus:border-blue-600 font-bold transition-all" placeholder="+382 ..." />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] px-1">Job Description / Professional Summary</label>
-                    <textarea value={editedUser.jobDescription || ''} onChange={e => setEditedUser({...editedUser, jobDescription: e.target.value})} rows={4} className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-3xl outline-none focus:ring-4 focus:ring-blue-600/10 focus:border-blue-600 font-medium transition-all" placeholder="Describe your key responsibilities and expertise..." />
-                  </div>
-
-                  <div className="flex gap-4 pt-6">
-                    <button type="submit" disabled={loading} className="flex-1 px-10 py-5 bg-blue-600 text-white rounded-[2rem] font-black uppercase text-xs tracking-[0.2em] shadow-2xl shadow-blue-500/30 hover:bg-blue-700 transition-all active:scale-95 disabled:opacity-50">
-                      {loading ? 'Processing...' : 'Commit Changes'}
-                    </button>
-                    <button type="button" onClick={() => { setIsEditing(false); setEditedUser({...user}); }} className="px-10 py-5 bg-slate-100 text-slate-500 rounded-[2rem] font-black uppercase text-xs tracking-[0.2em] hover:bg-slate-200 transition-all active:scale-95">
-                      Cancel
-                    </button>
-                  </div>
-               </form>
-            </div>
-          ) : (
-            <div className="space-y-10">
-              <div className="bg-white rounded-[4rem] p-12 shadow-2xl shadow-slate-200/50 border border-slate-100 relative overflow-hidden group">
-                 <div className="absolute top-0 right-0 w-64 h-64 bg-slate-50 rounded-full blur-[80px] group-hover:bg-blue-50 transition-all duration-1000"></div>
-                 <div className="relative z-10">
-                    <h3 className="text-xs font-black uppercase tracking-[0.4em] text-slate-400 mb-8 border-l-4 border-blue-600 pl-4">Career Overview</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-                       <div className="space-y-6">
-                          <div>
-                            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Current Role</p>
-                            <p className="text-xl font-black text-slate-900 tracking-tight">{user.jobTitle || 'Unassigned Personnel'}</p>
-                          </div>
-                          <div>
-                            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Division / Department</p>
-                            <p className="text-xl font-black text-slate-900 tracking-tight">{user.department || 'Awaiting Placement'}</p>
-                          </div>
-                       </div>
-                       <div className="space-y-6">
-                          <div>
-                            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Duty Station</p>
-                            <p className="text-xl font-black text-slate-900 tracking-tight">{user.airport || 'Network Wide'}</p>
-                          </div>
-                          <div>
-                            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Emergency Contact</p>
-                            <p className="text-xl font-black text-slate-900 tracking-tight">{user.phone || 'None Registered'}</p>
-                          </div>
-                       </div>
-                    </div>
-
-                    <div className="mt-12 pt-12 border-t border-slate-50">
-                       <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-4">Professional Brief</p>
-                       <p className="text-lg text-slate-600 font-medium leading-relaxed">
-                         {user.jobDescription || 'No professional bio available in the personnel file.'}
-                       </p>
-                    </div>
-                 </div>
+            <div className="bg-gradient-to-br from-white to-gray-50 rounded-2xl border border-gray-200 shadow-sm p-6 md:p-8">
+              <div className="flex items-center justify-between mb-8">
+                <h3 className="text-xl font-bold text-gray-900">
+                  {t.editProfileTitle || 'Edit Profile'}
+                </h3>
+                <button
+                  onClick={() => {
+                    setIsEditing(false);
+                    setEditedUser({ ...user });
+                  }}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </div>
 
-              {/* Training Integrity / Auth Status Card */}
-              <div className="bg-slate-900 rounded-[4rem] p-12 text-white shadow-2xl relative overflow-hidden">
-                <div className="absolute bottom-0 right-0 w-80 h-80 bg-blue-600/10 rounded-full blur-[100px]"></div>
-                <div className="relative z-10">
-                  <div className="flex items-center gap-4 mb-10">
-                     <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center shadow-xl shadow-blue-500/30">
-                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
-                     </div>
-                     <h3 className="text-2xl font-black tracking-tight uppercase">Authorization Registry</h3>
+              <form onSubmit={(e) => { e.preventDefault(); handleSave(); }} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      {t.fullName || 'Full Name'}
+                    </label>
+                    <input 
+                      type="text" 
+                      value={editedUser.name} 
+                      onChange={e => setEditedUser({...editedUser, name: e.target.value})} 
+                      className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-colors text-gray-900"
+                      required
+                    />
                   </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                     <div className="p-6 bg-white/5 border border-white/10 rounded-[2rem]">
-                        <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2">Hierarchy Level</p>
-                        <p className="text-xl font-black tracking-tighter uppercase">{user.role}</p>
-                     </div>
-                     <div className="p-6 bg-white/5 border border-white/10 rounded-[2rem]">
-                        <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2">Scope of Duty</p>
-                        <p className="text-xl font-black tracking-tighter uppercase line-clamp-1">{user.instructorScope || 'Standard Safety'}</p>
-                     </div>
-                     <div className="p-6 bg-white/5 border border-white/10 rounded-[2rem]">
-                        <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2">Auth. Expiry</p>
-                        <p className="text-xl font-black tracking-tighter uppercase">{user.instructorAuthExpiry ? new Date(user.instructorAuthExpiry).toLocaleDateString() : 'Active'}</p>
-                     </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      {t.jobTitle || 'Job Title'}
+                    </label>
+                    <input 
+                      type="text" 
+                      value={editedUser.jobTitle || ''} 
+                      onChange={e => setEditedUser({...editedUser, jobTitle: e.target.value})} 
+                      className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-colors text-gray-900"
+                      placeholder={t.placeholderJobTitle || 'e.g., Ramp Supervisor'}
+                    />
                   </div>
-                  
-                  <div className="mt-8 p-6 bg-blue-600/10 border border-blue-500/20 rounded-3xl flex items-center gap-5">
-                    <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
-                    </div>
-                    <p className="text-sm font-bold text-slate-300">Personnel records are audited in real-time. This profile is compliant with EASA Part-145 and ICAO SMS standards.</p>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      {t.departmentName || 'Department'}
+                    </label>
+                    <input 
+                      type="text" 
+                      value={editedUser.department || ''} 
+                      onChange={e => setEditedUser({...editedUser, department: e.target.value})} 
+                      className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-colors text-gray-900"
+                      placeholder={t.placeholderDepartment || 'e.g., Ground Operations'}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      {t.airportName || 'Airport'}
+                    </label>
+                    <input 
+                      type="text" 
+                      value={editedUser.airport || ''} 
+                      onChange={e => setEditedUser({...editedUser, airport: e.target.value})} 
+                      className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-colors text-gray-900"
+                      placeholder={t.placeholderAirport || 'e.g., Podgorica Airport (TGD)'}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      {t.staffId || 'Staff ID'}
+                    </label>
+                    <input 
+                      type="text" 
+                      value={editedUser.staffId || ''} 
+                      onChange={e => setEditedUser({...editedUser, staffId: e.target.value})} 
+                      className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-colors text-gray-900"
+                      placeholder={t.placeholderStaffId || 'e.g., TGD-OP-001'}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      {t.phoneNumber || 'Phone Number'}
+                    </label>
+                    <input 
+                      type="tel" 
+                      value={editedUser.phone || ''} 
+                      onChange={e => setEditedUser({...editedUser, phone: e.target.value})} 
+                      className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-colors text-gray-900"
+                      placeholder={t.placeholderPhone || '+382 XX XXX XXX'}
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      {t.professionalSummary || 'Professional Summary'}
+                    </label>
+                    <textarea 
+                      value={editedUser.jobDescription || ''} 
+                      onChange={e => setEditedUser({...editedUser, jobDescription: e.target.value})} 
+                      rows={4}
+                      className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-colors text-gray-900"
+                      placeholder={t.placeholderSummary || 'Brief description of your role and responsibilities...'}
+                    />
                   </div>
                 </div>
-              </div>
+
+                <div className="flex gap-3 pt-4">
+                  <button 
+                    type="submit" 
+                    disabled={loading}
+                    className="px-6 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-xl font-medium hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {loading ? (
+                      <>
+                        <svg className="animate-spin w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        {t.saving || 'Saving...'}
+                      </>
+                    ) : (
+                      <>
+                        {t.saveChangesButton || 'Save Changes'}
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </>
+                    )}
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={() => { setIsEditing(false); setEditedUser({...user}); }}
+                    className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition-colors"
+                  >
+                    {t.cancel || 'Cancel'}
+                  </button>
+                </div>
+              </form>
             </div>
+          ) : (
+            <>
+              {/* Profile Information */}
+              {activeTab === 'profile' && (
+                <div className="space-y-6">
+                  <div className="bg-gradient-to-br from-white to-gray-50 rounded-2xl border border-gray-200 shadow-sm p-6 md:p-8">
+                    <h3 className="text-xl font-bold text-gray-900 mb-6">
+                      {t.professionalInformation || 'Professional Information'}
+                    </h3>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-gray-500">
+                          {t.jobTitle || 'Job Title'}
+                        </p>
+                        <p className="text-lg font-semibold text-gray-900">
+                          {user.jobTitle || <span className="text-gray-400">{t.notSpecified || 'Not specified'}</span>}
+                        </p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-gray-500">
+                          {t.departmentName || 'Department'}
+                        </p>
+                        <p className="text-lg font-semibold text-gray-900">
+                          {user.department || <span className="text-gray-400">{t.notSpecified || 'Not specified'}</span>}
+                        </p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-gray-500">
+                          {t.airportName || 'Airport'}
+                        </p>
+                        <p className="text-lg font-semibold text-gray-900">
+                          {user.airport || <span className="text-gray-400">{t.notSpecified || 'Not specified'}</span>}
+                        </p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-gray-500">
+                          {t.staffId || 'Staff ID'}
+                        </p>
+                        <p className="text-lg font-semibold text-gray-900">
+                          {user.staffId || <span className="text-gray-400">{t.notSpecified || 'Not specified'}</span>}
+                        </p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-gray-500">
+                          {t.phoneNumber || 'Phone Number'}
+                        </p>
+                        <p className="text-lg font-semibold text-gray-900">
+                          {user.phone || <span className="text-gray-400">{t.notSpecified || 'Not specified'}</span>}
+                        </p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-gray-500">
+                          {t.email || 'Email'}
+                        </p>
+                        <p className="text-lg font-semibold text-gray-900">
+                          {user.email}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="text-sm font-medium text-gray-500 mb-3">
+                        {t.professionalSummary || 'Professional Summary'}
+                      </p>
+                      <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+                        <p className="text-gray-700">
+                          {user.jobDescription || (t.noProfessionalSummary || 'No professional summary provided.')}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Authorization Info */}
+                  {(user.role === UserRole.INSTRUCTOR || user.role === UserRole.ADMIN) && (
+                    <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl border border-gray-700 shadow-lg p-6 md:p-8 text-white">
+                      <div className="flex items-center gap-4 mb-6">
+                        <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center">
+                          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                          </svg>
+                        </div>
+                        <div>
+                          <h3 className="text-xl font-bold">
+                            {t.authorizationCompliance || 'Authorization & Compliance'}
+                          </h3>
+                          <p className="text-gray-300 text-sm">
+                            {t.compliantRecords || 'Compliant training records and authorizations'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                        <div className="p-4 bg-white/5 rounded-xl border border-white/10">
+                          <p className="text-sm font-medium text-gray-300 mb-1">
+                            {t.accessLevel || 'Access Level'}
+                          </p>
+                          <p className="text-lg font-bold">{user.role}</p>
+                        </div>
+                        <div className="p-4 bg-white/5 rounded-xl border border-white/10">
+                          <p className="text-sm font-medium text-gray-300 mb-1">
+                            {t.scopeOfDuty || 'Scope of Duty'}
+                          </p>
+                          <p className="text-lg font-bold">
+                            {user.instructorScope || (t.standardOperations || 'Standard Operations')}
+                          </p>
+                        </div>
+                        <div className="p-4 bg-white/5 rounded-xl border border-white/10">
+                          <p className="text-sm font-medium text-gray-300 mb-1">
+                            {t.authorizationExpiry || 'Authorization Expiry'}
+                          </p>
+                          <p className="text-lg font-bold">
+                            {user.instructorAuthExpiry 
+                              ? new Date(user.instructorAuthExpiry).toLocaleDateString() 
+                              : (t.activeStatus || 'Active')}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="p-4 bg-gradient-to-r from-blue-500/10 to-cyan-500/10 rounded-xl border border-blue-500/20 flex items-center gap-4">
+                        <div className="w-10 h-10 bg-emerald-500/20 rounded-full flex items-center justify-center">
+                          <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </div>
+                        <p className="text-sm text-gray-300">
+                          {t.complianceMessage || 'All training records are compliant with aviation regulations.'}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Security Tab */}
+              {activeTab === 'security' && (
+                <div className="bg-gradient-to-br from-white to-gray-50 rounded-2xl border border-gray-200 shadow-sm p-6 md:p-8">
+                  <h3 className="text-xl font-bold text-gray-900 mb-6">
+                    {t.accountSecurity || 'Account Security'}
+                  </h3>
+                  
+                  <div className="space-y-6">
+                    <div className="p-5 bg-gray-50 rounded-xl border border-gray-100">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium text-gray-900">
+                            {t.changePassword || 'Change Password'}
+                          </p>
+                          <p className="text-sm text-gray-600 mt-1">
+                            {t.lastChangedDays || 'Last changed 30 days ago'}
+                          </p>
+                        </div>
+                        <button 
+                          onClick={() => handleSecurityAction('change-password')}
+                          className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+                        >
+                          {t.changePassword || 'Change Password'}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="p-5 bg-gray-50 rounded-xl border border-gray-100">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium text-gray-900">
+                            {t.twoFactorAuth || 'Two-Factor Authentication'}
+                          </p>
+                          <p className="text-sm text-gray-600 mt-1">
+                            {t.extraSecurityLayer || 'Add an extra layer of security'}
+                          </p>
+                        </div>
+                        <button className="px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-lg font-medium hover:shadow-lg transition-all">
+                          {t.enable2FA || 'Enable 2FA'}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="p-5 bg-gray-50 rounded-xl border border-gray-100">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium text-gray-900">
+                            {t.activeSessions || 'Active Sessions'}
+                          </p>
+                          <p className="text-sm text-gray-600 mt-1">
+                            1 {t.activeSessions?.toLowerCase() || 'active session'}
+                          </p>
+                        </div>
+                        <button className="px-4 py-2 text-blue-600 hover:text-blue-800 font-medium">
+                          {t.viewAllSessions || 'View All Sessions'}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="p-5 bg-red-50 rounded-xl border border-red-100">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium text-red-900">
+                            {t.accountDeletion || 'Account Deletion'}
+                          </p>
+                          <p className="text-sm text-red-600 mt-1">
+                            {t.deleteAccountWarning || 'Permanently delete your account and all data'}
+                          </p>
+                        </div>
+                        <button 
+                          onClick={() => handleSecurityAction('delete-account')}
+                          className="px-4 py-2 bg-white border border-red-300 text-red-600 rounded-lg font-medium hover:bg-red-50 transition-colors"
+                        >
+                          {t.deleteAccountButton || 'Delete Account'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Activity Tab */}
+              {activeTab === 'activity' && (
+                <div className="bg-gradient-to-br from-white to-gray-50 rounded-2xl border border-gray-200 shadow-sm p-6 md:p-8">
+                  <h3 className="text-xl font-bold text-gray-900 mb-6">
+                    {t.recentActivity || 'Recent Activity'}
+                  </h3>
+                  
+                  {loadingLogs ? (
+                    <div className="flex justify-center items-center py-12">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {auditLogs
+                        .filter(log => log.userId === user.id)
+                        .slice(0, 10)
+                        .map((log) => (
+                          <div key={log.id} className="p-4 bg-gray-50 rounded-xl border border-gray-100 hover:bg-gray-100 transition-colors">
+                            <div className="flex items-start justify-between">
+                              <div>
+                                <p className="font-medium text-gray-900">{log.action}</p>
+                                <p className="text-sm text-gray-600 mt-1">{log.details}</p>
+                              </div>
+                              <span className="text-sm text-gray-500 whitespace-nowrap">
+                                {new Date(log.timestamp).toLocaleDateString()}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      
+                      {auditLogs.filter(log => log.userId === user.id).length === 0 && (
+                        <div className="text-center py-12">
+                          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                          </div>
+                          <p className="text-gray-600">
+                            {t.noActivityRecorded || 'No activity recorded yet.'}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
-
-      {showSuccess && (
-        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] bg-slate-900 text-white px-8 py-4 rounded-[2rem] shadow-2xl flex items-center gap-4 animate-in slide-in-from-bottom-20 duration-500">
-           <div className="w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={4} d="M5 13l4 4L19 7" /></svg>
-           </div>
-           <p className="text-sm font-black uppercase tracking-widest">Sertifikat identity updated successfully</p>
-        </div>
-      )}
     </div>
   );
 };

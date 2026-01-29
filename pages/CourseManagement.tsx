@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../db';
@@ -11,15 +10,35 @@ const CourseManagement: React.FC<{ user: User, lang: Language }> = ({ user, lang
   const [courses, setCourses] = useState<Course[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     if (user.role === UserRole.TRAINEE) {
       navigate('/dashboard');
       return;
     }
-    setCourses(db.getCourses());
-    setUsers(db.getUsers());
-  }, [user, navigate]);
+    
+    const loadData = async () => {
+      try {
+        setIsLoading(true);
+        
+        // Load users from localStorage (for backward compatibility)
+        const usersData = db.getUsers();
+        setUsers(usersData);
+        
+        // Load courses from Supabase
+        const coursesData = await db.getCourses();
+        setCourses(coursesData);
+      } catch (error) {
+        console.error('Error loading data:', error);
+        alert(lang === 'en' ? 'Error loading course data' : 'Greška pri učitavanju podataka kursa');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadData();
+  }, [user, navigate, lang]);
 
   const canEdit = user.role === UserRole.ADMIN || user.role === UserRole.INSTRUCTOR;
   const canDelete = user.role === UserRole.ADMIN;
@@ -33,15 +52,45 @@ const CourseManagement: React.FC<{ user: User, lang: Language }> = ({ user, lang
     );
   }, [courses, searchQuery]);
 
-  const handleDelete = (id: string) => {
-    if (!canDelete) return;
-    if (confirm('Are you sure you want to delete this course? This action cannot be undone.')) {
-      const updated = courses.filter(c => c.id !== id);
-      db.saveCourses(updated);
-      db.logAction(user.id, 'COURSE_DELETE', `Deleted course ID: ${id}`);
-      setCourses(updated);
+const handleDelete = async (id: string) => {
+  if (!canDelete) return;
+  
+  const confirmMessage = lang === 'en' 
+    ? 'Are you sure you want to delete this course? This action cannot be undone.'
+    : 'Da li ste sigurni da želite da obrišete ovaj kurs? Ova radnja se ne može poništiti.';
+  
+  if (confirm(confirmMessage)) {
+    try {
+      const success = await db.deleteCourse(id);
+      
+      if (success) {
+        // Update local state
+        setCourses(courses.filter(c => c.id !== id));
+        
+        // Log the action
+        await db.logAction(user.id, 'COURSE_DELETE', `Deleted course ID: ${id}`);
+        
+        alert(lang === 'en' ? 'Course deleted successfully!' : 'Kurs uspješno obrisan!');
+      } else {
+        throw new Error('Delete failed');
+      }
+    } catch (error) {
+      console.error('Error deleting course:', error);
+      alert(lang === 'en' ? 'Error deleting course' : 'Greška pri brisanju kursa');
     }
-  };
+  }
+};
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-slate-600">{lang === 'en' ? 'Loading courses...' : 'Učitavanje kurseva...'}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -71,7 +120,7 @@ const CourseManagement: React.FC<{ user: User, lang: Language }> = ({ user, lang
         </div>
         <input 
           type="text" 
-          placeholder="Search by title or category..."
+          placeholder={lang === 'en' ? "Search by title or category..." : "Pretraži po naslovu ili kategoriji..."}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="w-full pl-12 pr-6 py-4 bg-white border border-slate-200 rounded-2xl shadow-sm outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition-all text-slate-900 font-medium"
@@ -95,7 +144,7 @@ const CourseManagement: React.FC<{ user: User, lang: Language }> = ({ user, lang
               {filteredCourses.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-12 text-center text-slate-400 font-medium uppercase tracking-widest text-xs">
-                    {t.noCoursesFound}
+                    {t.noCoursesFound || 'No courses found'}
                   </td>
                 </tr>
               ) : (
@@ -103,7 +152,14 @@ const CourseManagement: React.FC<{ user: User, lang: Language }> = ({ user, lang
                   <tr key={course.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center space-x-3">
-                        <img src={course.thumbnail} className="w-10 h-10 rounded-lg object-cover shadow-sm" alt={course.title} />
+                        <img 
+                          src={course.thumbnail} 
+                          className="w-10 h-10 rounded-lg object-cover shadow-sm" 
+                          alt={course.title} 
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1542296332-2e4473faf563?auto=format&fit=crop&w=400&q=80';
+                          }}
+                        />
                         <span className="font-semibold text-slate-900">{course.title}</span>
                       </div>
                     </td>
@@ -133,6 +189,7 @@ const CourseManagement: React.FC<{ user: User, lang: Language }> = ({ user, lang
                         <button 
                           onClick={() => navigate(`/admin/course/edit/${course.id}`)}
                           className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                          title={lang === 'en' ? 'Edit course' : 'Uredi kurs'}
                         >
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -143,6 +200,7 @@ const CourseManagement: React.FC<{ user: User, lang: Language }> = ({ user, lang
                         <button 
                           onClick={() => handleDelete(course.id)}
                           className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                          title={lang === 'en' ? 'Delete course' : 'Obriši kurs'}
                         >
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />

@@ -1,7 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { db } from '../db';
 import { Language, translations } from '../translations';
 import { useNavigate } from 'react-router-dom';
+import { Course } from '../types';
 
 interface PublicCoursesProps {
   lang: Language;
@@ -13,13 +14,49 @@ const PublicCourses: React.FC<PublicCoursesProps> = ({ lang, setLang }) => {
   const t = translations[lang];
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   
-  const courses = useMemo(() => db.getCourses(), []);
+  // Load courses from Supabase
+  useEffect(() => {
+    const loadCourses = async () => {
+      try {
+        setLoading(true);
+        console.log('Loading public courses from Supabase...');
+        
+        const coursesData = await db.getCourses();
+        console.log(`Loaded ${coursesData.length} courses from Supabase`);
+        
+        // Debug: log first few courses
+        coursesData.slice(0, 3).forEach((course, idx) => {
+          console.log(`Course ${idx + 1}:`, {
+            id: course.id,
+            title: course.title,
+            category: course.category,
+            lessons: course.lessons?.length || 0,
+            hasThumbnail: !!course.thumbnail
+          });
+        });
+        
+        setCourses(coursesData);
+        setError(null);
+      } catch (err) {
+        console.error('Error loading courses:', err);
+        setError('Failed to load courses. Please try again later.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    loadCourses();
+  }, []);
 
   // Extract unique categories
   const categories = useMemo(() => {
     const allCategories = courses.map(c => c.category);
-    return ['all', ...Array.from(new Set(allCategories))];
+    const uniqueCategories = Array.from(new Set(allCategories));
+    return ['all', ...uniqueCategories];
   }, [courses]);
 
   const filteredCourses = useMemo(() => {
@@ -28,11 +65,15 @@ const PublicCourses: React.FC<PublicCoursesProps> = ({ lang, setLang }) => {
     // Filter by search term
     if (searchTerm) {
       const lowerSearch = searchTerm.toLowerCase();
-      result = result.filter(c => 
-        c.title.toLowerCase().includes(lowerSearch) || 
-        c.category.toLowerCase().includes(lowerSearch) ||
-        c.description.toLowerCase().includes(lowerSearch)
-      );
+      result = result.filter(c => {
+        const title = c.title?.toLowerCase() || '';
+        const category = c.category?.toLowerCase() || '';
+        const description = c.description?.toLowerCase() || '';
+        
+        return title.includes(lowerSearch) || 
+               category.includes(lowerSearch) ||
+               description.includes(lowerSearch);
+      });
     }
     
     // Filter by category
@@ -42,6 +83,127 @@ const PublicCourses: React.FC<PublicCoursesProps> = ({ lang, setLang }) => {
     
     return result;
   }, [courses, searchTerm, selectedCategory]);
+
+  // Calculate estimated duration based on lessons
+  const calculateDuration = (course: Course): string => {
+    const totalLessons = course.lessons?.length || 0;
+    if (totalLessons === 0) return lang === 'en' ? 'Self-paced' : 'Samostalno';
+    
+    const avgTimePerLesson = 30; // minutes
+    const totalMinutes = totalLessons * avgTimePerLesson;
+    
+    if (totalMinutes < 60) {
+      return `${totalMinutes}m`;
+    } else if (totalMinutes < 480) { // 8 hours
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+      return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+    } else {
+      const days = Math.ceil(totalMinutes / 480); // 8-hour work day
+      return `${days} ${lang === 'en' ? 'days' : 'dana'}`;
+    }
+  };
+
+  // Default thumbnail if not provided
+  const getThumbnailUrl = (course: Course): string => {
+    if (course.thumbnail) return course.thumbnail;
+    
+    // Generate placeholder based on category
+    const categoryColors: Record<string, string> = {
+      'Safety': 'from-red-50 to-orange-50',
+      'Security': 'from-blue-50 to-indigo-50',
+      'Operations': 'from-green-50 to-teal-50',
+      'Customer Service': 'from-purple-50 to-pink-50',
+      'default': 'from-gray-50 to-blue-50'
+    };
+    
+    const gradient = categoryColors[course.category] || categoryColors.default;
+    return `linear-gradient(135deg, ${gradient})`;
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 font-['Inter'] text-gray-800">
+        {/* Navigation */}
+        <nav className="sticky top-0 z-50 bg-white border-b border-gray-200/50 shadow-sm">
+          <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="relative">
+                <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-lg blur opacity-60"></div>
+                <div className="relative bg-gradient-to-r from-blue-700 to-cyan-700 p-2 rounded-lg">
+                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+                  </svg>
+                </div>
+              </div>
+              <div>
+                <div className="text-lg font-bold text-gray-900">CLOUDTRAINING</div>
+                <div className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Aviation Training</div>
+              </div>
+            </div>
+          </div>
+        </nav>
+
+        {/* Loading State */}
+        <div className="max-w-7xl mx-auto px-6 py-20 text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+          <h2 className="text-xl font-semibold text-gray-700 mb-2">
+            {lang === 'en' ? 'Loading courses...' : 'Učitavanje tečajeva...'}
+          </h2>
+          <p className="text-gray-500">
+            {lang === 'en' ? 'Fetching the latest training programs...' : 'Preuzimamo najnovije programe obuke...'}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 font-['Inter'] text-gray-800">
+        {/* Navigation */}
+        <nav className="sticky top-0 z-50 bg-white border-b border-gray-200/50 shadow-sm">
+          <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="relative">
+                <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-lg blur opacity-60"></div>
+                <div className="relative bg-gradient-to-r from-blue-700 to-cyan-700 p-2 rounded-lg">
+                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+                  </svg>
+                </div>
+              </div>
+              <div>
+                <div className="text-lg font-bold text-gray-900">CLOUDTRAINING</div>
+                <div className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Aviation Training</div>
+              </div>
+            </div>
+          </div>
+        </nav>
+
+        {/* Error State */}
+        <div className="max-w-7xl mx-auto px-6 py-20 text-center">
+          <div className="w-20 h-20 bg-red-50 rounded-2xl flex items-center justify-center mx-auto mb-6">
+            <svg className="w-10 h-10 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-3">
+            {lang === 'en' ? 'Unable to load courses' : 'Ne mogu se učitati tečajevi'}
+          </h2>
+          <p className="text-gray-600 max-w-md mx-auto mb-8">
+            {error}
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-6 py-2.5 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            {lang === 'en' ? 'Try Again' : 'Pokušaj Ponovo'}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 font-['Inter'] text-gray-800">
@@ -115,6 +277,32 @@ const PublicCourses: React.FC<PublicCoursesProps> = ({ lang, setLang }) => {
                 : 'Pregledajte našu sveobuhvatnu kolekciju programa avijacijske obuke dizajniranih za regulatornu usklađenost i profesionalni razvoj.'}
             </p>
 
+            {/* Stats */}
+            <div className="flex flex-wrap justify-center gap-6 mb-10">
+              <div className="text-center">
+                <div className="text-3xl font-bold text-blue-600">{courses.length}</div>
+                <div className="text-sm text-gray-600 font-medium">
+                  {lang === 'en' ? 'Courses Available' : 'Dostupnih kurseva'}
+                </div>
+              </div>
+              <div className="text-center">
+                <div className="text-3xl font-bold text-cyan-600">
+                  {courses.reduce((total, course) => total + (course.lessons?.length || 0), 0)}
+                </div>
+                <div className="text-sm text-gray-600 font-medium">
+                  {lang === 'en' ? 'Learning Modules' : 'Modula za učenje'}
+                </div>
+              </div>
+              <div className="text-center">
+                <div className="text-3xl font-bold text-green-600">
+                  {categories.length - 1}
+                </div>
+                <div className="text-sm text-gray-600 font-medium">
+                  {lang === 'en' ? 'Categories' : 'Kategorija'}
+                </div>
+              </div>
+            </div>
+
             {/* Search Bar */}
             <div className="relative max-w-2xl mx-auto mb-12">
               <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none">
@@ -175,12 +363,22 @@ const PublicCourses: React.FC<PublicCoursesProps> = ({ lang, setLang }) => {
                   className="group bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-blue-200 transition-all duration-300 overflow-hidden flex flex-col h-full"
                 >
                   {/* Course Image */}
-                  <div className="h-48 relative overflow-hidden bg-gradient-to-br from-blue-50 to-cyan-50">
+                  <div 
+                    className="h-48 relative overflow-hidden"
+                    style={course.thumbnail ? undefined : {
+                      background: getThumbnailUrl(course)
+                    }}
+                  >
                     {course.thumbnail ? (
                       <img 
                         src={course.thumbnail} 
                         alt={course.title} 
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        onError={(e) => {
+                          // Fallback to gradient if image fails to load
+                          e.currentTarget.style.display = 'none';
+                          e.currentTarget.parentElement!.style.background = getThumbnailUrl(course);
+                        }}
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
@@ -193,7 +391,12 @@ const PublicCourses: React.FC<PublicCoursesProps> = ({ lang, setLang }) => {
                     )}
                     <div className="absolute top-4 left-4">
                       <span className="px-3 py-1 bg-white/90 backdrop-blur-sm rounded-lg text-xs font-semibold text-blue-700 shadow-sm">
-                        {course.category.charAt(0).toUpperCase() + course.category.slice(1)}
+                        {course.category?.charAt(0).toUpperCase() + course.category?.slice(1) || 'General'}
+                      </span>
+                    </div>
+                    <div className="absolute top-4 right-4">
+                      <span className="px-2 py-1 bg-black/50 backdrop-blur-sm rounded text-xs font-semibold text-white">
+                        v{course.version || '1.0'}
                       </span>
                     </div>
                   </div>
@@ -201,11 +404,11 @@ const PublicCourses: React.FC<PublicCoursesProps> = ({ lang, setLang }) => {
                   {/* Course Content */}
                   <div className="p-6 flex-1 flex flex-col">
                     <h3 className="text-xl font-bold text-gray-900 mb-3 group-hover:text-blue-600 transition-colors line-clamp-2">
-                      {course.title}
+                      {course.title || 'Untitled Course'}
                     </h3>
                     
                     <p className="text-gray-600 text-sm leading-relaxed mb-6 line-clamp-3 flex-1">
-                      {course.description}
+                      {course.description || 'No description available.'}
                     </p>
                     
                     {/* Course Metadata */}
@@ -214,14 +417,21 @@ const PublicCourses: React.FC<PublicCoursesProps> = ({ lang, setLang }) => {
                         <svg className="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
-                        <span>{course.lessons.length} {lang === 'en' ? 'lessons' : 'lekcija'}</span>
+                        <span>{calculateDuration(course)}</span>
                       </div>
                       
                       <div className="flex items-center text-sm text-gray-500">
                         <svg className="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                         </svg>
-                        <span>{course.duration || 'Self-paced'}</span>
+                        <span>{course.lessons?.length || 0} {lang === 'en' ? 'lessons' : 'lekcija'}</span>
+                      </div>
+                      
+                      <div className="flex items-center text-sm text-gray-500">
+                        <svg className="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>{course.validityYears || 2} {lang === 'en' ? 'years validity' : 'godina važenja'}</span>
                       </div>
                     </div>
                     
@@ -251,7 +461,7 @@ const PublicCourses: React.FC<PublicCoursesProps> = ({ lang, setLang }) => {
               </svg>
             </div>
             <h3 className="text-2xl font-bold text-gray-900 mb-3">
-              {lang === 'en' ? 'No courses found' : 'Nije pronađen nijedan tečaj'}
+              {lang === 'en' ? 'No courses found' : 'Nije pronađen nijedan kurs'}
             </h3>
             <p className="text-gray-600 max-w-md mx-auto mb-8">
               {lang === 'en' 
