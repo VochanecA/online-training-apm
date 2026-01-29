@@ -13,7 +13,8 @@ import {
   SupabaseCourse,
   SupabaseLesson,
   SupabaseExam,
-  PracticalStatus 
+  PracticalStatus,
+  QuestionSet 
 } from './types';
 import { supabase } from './lib/supabase';
 
@@ -80,95 +81,6 @@ const toLesson = (data: SupabaseLesson): Lesson => {
 
   return lesson;
 };
-
- getQuestionSetsByCourseId: async (courseId: string): Promise<QuestionSet[]> => {
-    try {
-      const { data, error } = await supabase
-        .from('question_sets')
-        .select('*')
-        .eq('course_id', courseId)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      
-      return data.map((set: any) => ({
-        id: set.id,
-        courseId: set.course_id,
-        name: set.name,
-        description: set.description,
-        questions: set.questions || [],
-        createdAt: set.created_at,
-        updatedAt: set.updated_at
-      }));
-    } catch (error) {
-      console.error('Error fetching question sets:', error);
-      return [];
-    }
-  },
-
-  saveQuestionSet: async (questionSet: QuestionSet): Promise<QuestionSet | null> => {
-    try {
-      const setData = {
-        course_id: questionSet.courseId,
-        name: questionSet.name,
-        description: questionSet.description,
-        questions: questionSet.questions,
-        updated_at: new Date().toISOString()
-      };
-
-      let data;
-      if (questionSet.id) {
-        // Update existing
-        const { data: updated, error } = await supabase
-          .from('question_sets')
-          .update(setData)
-          .eq('id', questionSet.id)
-          .select()
-          .single();
-
-        if (error) throw error;
-        data = updated;
-      } else {
-        // Create new
-        const { data: created, error } = await supabase
-          .from('question_sets')
-          .insert([{ ...setData, created_at: new Date().toISOString() }])
-          .select()
-          .single();
-
-        if (error) throw error;
-        data = created;
-      }
-
-      return {
-        id: data.id,
-        courseId: data.course_id,
-        name: data.name,
-        description: data.description,
-        questions: data.questions,
-        createdAt: data.created_at,
-        updatedAt: data.updated_at
-      };
-    } catch (error) {
-      console.error('Error saving question set:', error);
-      return null;
-    }
-  },
-
-  deleteQuestionSet: async (setId: string): Promise<boolean> => {
-    try {
-      const { error } = await supabase
-        .from('question_sets')
-        .delete()
-        .eq('id', setId);
-
-      if (error) throw error;
-      return true;
-    } catch (error) {
-      console.error('Error deleting question set:', error);
-      return false;
-    }
-  }
 
 const toExam = (data: SupabaseExam): Exam => {
   console.log('DB [toExam]: Converting exam:', {
@@ -807,6 +719,96 @@ export const db = {
     } catch (error) {
       console.error('DB: Error saving questions:', error);
       throw error;
+    }
+  },
+
+  // QUESTION SETS
+  getQuestionSetsByCourseId: async (courseId: string): Promise<QuestionSet[]> => {
+    try {
+      const { data, error } = await supabase
+        .from('question_sets')
+        .select('*')
+        .eq('course_id', courseId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      
+      return data.map((set: any) => ({
+        id: set.id,
+        courseId: set.course_id,
+        name: set.name,
+        description: set.description,
+        questions: set.questions || [],
+        createdAt: set.created_at,
+        updatedAt: set.updated_at
+      }));
+    } catch (error) {
+      console.error('Error fetching question sets:', error);
+      return [];
+    }
+  },
+
+  saveQuestionSet: async (questionSet: QuestionSet): Promise<QuestionSet | null> => {
+    try {
+      const setData = {
+        course_id: questionSet.courseId,
+        name: questionSet.name,
+        description: questionSet.description,
+        questions: questionSet.questions,
+        updated_at: new Date().toISOString()
+      };
+
+      let data;
+      if (questionSet.id) {
+        // Update existing
+        const { data: updated, error } = await supabase
+          .from('question_sets')
+          .update(setData)
+          .eq('id', questionSet.id)
+          .select()
+          .single();
+
+        if (error) throw error;
+        data = updated;
+      } else {
+        // Create new
+        const { data: created, error } = await supabase
+          .from('question_sets')
+          .insert([{ ...setData, created_at: new Date().toISOString() }])
+          .select()
+          .single();
+
+        if (error) throw error;
+        data = created;
+      }
+
+      return {
+        id: data.id,
+        courseId: data.course_id,
+        name: data.name,
+        description: data.description,
+        questions: data.questions,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at
+      };
+    } catch (error) {
+      console.error('Error saving question set:', error);
+      return null;
+    }
+  },
+
+  deleteQuestionSet: async (setId: string): Promise<boolean> => {
+    try {
+      const { error } = await supabase
+        .from('question_sets')
+        .delete()
+        .eq('id', setId);
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Error deleting question set:', error);
+      return false;
     }
   },
 
