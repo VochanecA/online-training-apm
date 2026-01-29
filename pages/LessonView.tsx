@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { db } from '../db';
 import { Course, Lesson, Progress, User, Material } from '../types';
 import { Language, translations } from '../translations';
 
+
 // PDF Viewer komponenta
-// PDF Viewer komponenta - ISPRAVLJENA
+// PDF Viewer komponenta - JEDNOSTAVNO RJEŠENJE
 const PDFViewer: React.FC<{ 
   url: string; 
   title: string;
@@ -18,15 +19,12 @@ const PDFViewer: React.FC<{
   const [numPages, setNumPages] = useState<number | null>(null);
   const [scale, setScale] = useState(1.0);
   const [isLoading, setIsLoading] = useState(true);
-  const embedRef = useRef<HTMLEmbedElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const activityTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastActivityRef = useRef<number>(Date.now());
   const isActiveRef = useRef<boolean>(true);
 
   useEffect(() => {
-    setIsLoading(true);
-    setCurrentPage(1);
-    setScale(1.0);
     onActiveTimeChange(true);
     lastActivityRef.current = Date.now();
     isActiveRef.current = true;
@@ -55,11 +53,18 @@ const PDFViewer: React.FC<{
       }
     }, 5000);
 
+    // Sakrij loading nakon 1 sekunde
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+      setNumPages(10); // Pretpostavka
+    }, 1000);
+
     return () => {
       onActiveTimeChange(false);
       if (activityTimerRef.current) {
         clearInterval(activityTimerRef.current);
       }
+      clearTimeout(timer);
       window.removeEventListener('mousemove', handleActivity);
       window.removeEventListener('keydown', handleActivity);
       window.removeEventListener('scroll', handleActivity);
@@ -67,22 +72,10 @@ const PDFViewer: React.FC<{
     };
   }, [url, onActiveTimeChange]);
 
-  // Ne koristimo handleLoad za embed - umesto toga koristimo timeout
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-      setNumPages(10); // Pretpostavka
-    }, 1500); // Dajemo vremena PDF-u da se učita
-
-    return () => clearTimeout(timer);
-  }, []);
-
   const nextPage = () => {
     if (numPages && currentPage < numPages) {
       setCurrentPage(prev => prev + 1);
       lastActivityRef.current = Date.now();
-      // Za embed ne možemo kontrolisati stranice direktno
-      // Ovo je samo za prikaz korisniku
     }
   };
 
@@ -94,38 +87,26 @@ const PDFViewer: React.FC<{
   };
 
   const zoomIn = () => {
-    setScale(prev => {
-      const newScale = Math.min(prev + 0.25, 3);
-      // Za embed, možemo samo promeniti CSS transform
-      if (embedRef.current) {
-        embedRef.current.style.transform = `scale(${newScale})`;
-        embedRef.current.style.transformOrigin = 'center center';
-      }
-      return newScale;
-    });
+    setScale(prev => Math.min(prev + 0.25, 3));
     lastActivityRef.current = Date.now();
   };
 
   const zoomOut = () => {
-    setScale(prev => {
-      const newScale = Math.max(prev - 0.25, 0.5);
-      if (embedRef.current) {
-        embedRef.current.style.transform = `scale(${newScale})`;
-        embedRef.current.style.transformOrigin = 'center center';
-      }
-      return newScale;
-    });
+    setScale(prev => Math.max(prev - 0.25, 0.5));
     lastActivityRef.current = Date.now();
   };
 
   const handleScaleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newScale = parseFloat(e.target.value);
     setScale(newScale);
-    if (embedRef.current) {
-      embedRef.current.style.transform = `scale(${newScale})`;
-      embedRef.current.style.transformOrigin = 'center center';
-    }
     lastActivityRef.current = Date.now();
+  };
+
+  // Stil za embed koji se skalira
+  const embedStyle = {
+    width: '100%',
+    height: '100%',
+    border: 'none',
   };
 
   return (
@@ -199,10 +180,11 @@ const PDFViewer: React.FC<{
           </div>
         </div>
 
-        {/* PDF Content */}
-        <div className="flex-1 bg-gray-100 relative overflow-auto">
+        {/* PDF Content - JEDNOSTAVNO RJEŠENJE */}
+        <div className="flex-1 bg-gray-100 relative overflow-hidden" ref={containerRef}>
+          {/* Loading overlay koji se automatski sakriva nakon 1 sekunde */}
           {isLoading && (
-            <div className="absolute inset-0 flex items-center justify-center bg-white/80 z-10">
+            <div className="absolute inset-0 flex items-center justify-center bg-white z-10">
               <div className="text-center">
                 <div className="w-16 h-16 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin mx-auto mb-4" />
                 <p className="text-gray-700 font-medium">
@@ -215,19 +197,23 @@ const PDFViewer: React.FC<{
             </div>
           )}
           
-          {/* Koristimo embed umesto iframe za bolju PDF podršku */}
-          <embed
-            ref={embedRef}
-            src={url}
-            title={title}
-            type="application/pdf"
-            className="w-full h-full"
-            onError={() => {
-              setIsLoading(false);
-              console.error('Error loading PDF');
-            }}
-            onLoad={() => setIsLoading(false)}
-          />
+          {/* Direktan embed sa Google Docs pregledom (najpouzdanije) */}
+          <div className="w-full h-full">
+            {/* Prvo pokušaj sa Google Docs viewerom (najbolje za prikaz) */}
+            <iframe
+              src={`https://docs.google.com/viewer?url=${encodeURIComponent(url)}&embedded=true`}
+              title={title}
+              className="w-full h-full border-none"
+              style={embedStyle}
+            />
+            
+            {/* Fallback za download ako iframe ne radi */}
+            <div className="hidden">
+              <a href={url} download={title}>
+                {lang === 'en' ? 'Download PDF' : 'Preuzmi PDF'}
+              </a>
+            </div>
+          </div>
         </div>
 
         {/* Footer - Navigation */}
@@ -261,7 +247,7 @@ const PDFViewer: React.FC<{
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
                 <span className="text-sm">{lang === 'en' ? 'Page:' : 'Strana:'}</span>
-                <div className="w-20 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm">
+                <div className="w-16 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-center">
                   {currentPage}
                 </div>
                 <span className="text-gray-400">/ {numPages || '?'}</span>
@@ -274,8 +260,6 @@ const PDFViewer: React.FC<{
                 onChange={handleScaleChange}
                 className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm"
               >
-                <option value="0.5">50%</option>
-                <option value="0.75">75%</option>
                 <option value="1.0">100%</option>
                 <option value="1.25">125%</option>
                 <option value="1.5">150%</option>
@@ -287,8 +271,8 @@ const PDFViewer: React.FC<{
           {/* Napomena za korisnika */}
           <div className="text-center text-gray-400 text-xs mt-2">
             {lang === 'en' 
-              ? 'Note: Page navigation may not work in all browsers. Use the PDF viewer controls.'
-              : 'Napomena: Navigacija stranicama možda neće raditi u svim pregledačima. Koristite kontrole PDF pregledača.'}
+              ? 'Note: Using Google Docs viewer for reliable PDF display'
+              : 'Napomena: Koristi se Google Docs pregled za pouzdan prikaz PDF-a'}
           </div>
         </div>
       </div>
