@@ -184,14 +184,14 @@ const handleLoginSuccess = () => {
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 leading-tight mb-6">
               {lang === 'en' ? 'Professional' : 'Profesionalna'}
               <span className="block text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-cyan-600">
-                {lang === 'en' ? 'Aviation Training Platform' : 'Platforma za avijacijsku obuku'}
+                {lang === 'en' ? 'Aviation Training Platform' : 'Platforma za obuku'}
               </span>
             </h1>
             
             <p className="text-lg sm:text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed mb-8">
               {lang === 'en' 
                 ? 'Streamline airport personnel training, automate compliance tracking, and ensure regulatory readiness with our enterprise-grade aviation training solution.'
-                : 'Optimizirajte obuku aerodromskog osoblja, automatizirajte praćenje usklađenosti i osigurajte regulatornu spremnost s našim poslovnim rješenjem za avijacijsku obuku.'}
+                : 'Optimizirajte obuku aerodromskog osoblja, automatizirajte praćenje usklađenosti i osigurajte regulatornu spremnost s našim poslovnim rješenjem za obuku.'}
             </p>
 
             <div className="flex flex-wrap justify-center gap-4">
@@ -361,7 +361,7 @@ const handleLoginSuccess = () => {
               <p className="text-gray-500 text-sm">
                 {lang === 'en' 
                   ? 'Professional Aviation Training Platform'
-                  : 'Profesionalna platforma za avijacijsku obuku'}
+                  : 'Profesionalna platforma za obuku'}
               </p>
             </div>
 
