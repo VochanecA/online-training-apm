@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../db';
-import { User, UserRole } from '../types';
+import { User, UserRole, Course, UserCourseAssignment } from '../types'; // DODAJTE UserCourseAssignment
 import { Language, translations } from '../translations';
 import { useNavigate } from 'react-router-dom';
 
@@ -8,25 +8,83 @@ const UserManagement: React.FC<{ user: User, lang: Language }> = ({ user, lang }
   const navigate = useNavigate();
   const t = translations[lang];
   const [users, setUsers] = useState<User[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]); // DODAJTE
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [userAssignments, setUserAssignments] = useState<UserCourseAssignment[]>([]); // DODAJTE
   const [isCreating, setIsCreating] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  
+  // State za modal dodeljivanja kurseva
+  const [showCourseAssignmentModal, setShowCourseAssignmentModal] = useState(false);
+  const [selectedCourseToAssign, setSelectedCourseToAssign] = useState<string>('');
+  const [assignmentDueDate, setAssignmentDueDate] = useState<string>('');
+  const [isAssignmentRequired, setIsAssignmentRequired] = useState<boolean>(true);
 
-  useEffect(() => {
-    if (user.role !== UserRole.ADMIN) {
-      navigate('/dashboard');
-      return;
-    }
-    const loadUsers = async () => {
-      setIsLoading(true);
-      // Simulate API loading
-      await new Promise(resolve => setTimeout(resolve, 500));
-      setUsers(db.getUsers());
+// Dodajte u useEffect u UserManagement.tsx:
+useEffect(() => {
+  if (user.role !== UserRole.ADMIN) {
+    navigate('/app');
+    return;
+  }
+  
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      // Proverite da li treba migracija
+      const localUsers = JSON.parse(localStorage.getItem('skyway_users') || '[]');
+      const needsMigration = localUsers.some((u: User) => u.id.startsWith('u-'));
+      
+      if (needsMigration && users.length === 0) {
+        const shouldMigrate = window.confirm(
+          'Some users need to be migrated to Supabase Auth. Migrate now?'
+        );
+        
+        if (shouldMigrate) {
+          await db.migrateUsers();
+        }
+      }
+      
+      // Učitajte korisnike
+      const usersData = JSON.parse(localStorage.getItem('skyway_users') || '[]');
+      
+      // Učitajte kurseve iz Supabase
+      const coursesData = await db.getCourses();
+      
+      setUsers(usersData);
+      setCourses(coursesData);
+      console.log('Loaded', coursesData.length, 'courses');
+    } catch (error) {
+      console.error('Error loading data:', error);
+    } finally {
       setIsLoading(false);
-    };
-    loadUsers();
-  }, [user, navigate]);
+    }
+  };
+  
+  loadData();
+}, [user, navigate]);
+
+  // Funkcija za učitavanje dodeljenih kurseva za korisnika
+  const loadUserAssignments = async (userId: string) => {
+    try {
+      console.log('Loading assignments for user:', userId);
+      const assignments = await db.getUserCourseAssignments(userId);
+      console.log('Assignments loaded:', assignments);
+      setUserAssignments(assignments);
+    } catch (error) {
+      console.error('Error loading user assignments:', error);
+      setUserAssignments([]);
+    }
+  };
+
+  // Kada se promeni editingUser, učitajte njegove dodeljene kurseve
+  useEffect(() => {
+    if (editingUser) {
+      loadUserAssignments(editingUser.id);
+    } else {
+      setUserAssignments([]);
+    }
+  }, [editingUser]);
 
   const stats = useMemo(() => ({
     total: users.length,
@@ -44,42 +102,125 @@ const UserManagement: React.FC<{ user: User, lang: Language }> = ({ user, lang }
     );
   }, [users, searchTerm]);
 
-  const handleEdit = (u: User) => {
+  const handleEdit = async (u: User) => {
     setEditingUser({ ...u });
     setIsCreating(false);
   };
 
-  const handleCreateNew = () => {
-    const newUser: User = {
-      id: `u-${Date.now()}`,
-      email: '',
-      name: '',
-      role: UserRole.TRAINEE,
-      staffId: '',
-      airport: '',
-      department: '',
-      jobTitle: '',
-      jobDescription: '',
-      phone: ''
-    };
-    setEditingUser(newUser);
-    setIsCreating(true);
+// Zamenite postojeći handleCreateNew sa ovim:
+const handleCreateNew = () => {
+  const newUser: User = {
+    id: '', // ⭐⭐⭐ PROBLEM: PRAZAN ID! ⭐⭐⭐
+    email: '',
+    name: '',
+    role: UserRole.TRAINEE,
+    staffId: '',
+    airport: '',
+    department: '',
+    jobTitle: '',
+    jobDescription: '',
+    phone: ''
   };
+  setEditingUser(newUser);
+  setIsCreating(true);
+};
 
-  const handleSave = () => {
-    if (editingUser) {
-      if (!editingUser.name || !editingUser.email) {
-        alert(t.nameEmailRequired);
-        return;
+// Zamenite postojeći handleSave sa ovim:
+const handleSave = async () => {
+  if (!editingUser) return;
+  
+  if (!editingUser.name || !editingUser.email) {
+    alert(t.nameEmailRequired);
+    return;
+  }
+  
+  try {
+    if (isCreating) {
+      // ⭐⭐⭐ KREIRAJTE KORISNIKA U SUPABASE AUTH PRVO ⭐⭐⭐
+      console.log('Creating new user in Supabase Auth...');
+      
+      // Generišite privremenu lozinku
+      const tempPassword = `Temp${Date.now().toString().slice(-6)}!`;
+      
+      // Kreirajte korisnika u Supabase Auth
+      const authUser = await db.createAuthUser(
+        editingUser.email,
+        tempPassword,
+        editingUser.name,
+        editingUser.role
+      );
+      
+      if (!authUser) {
+        throw new Error('Failed to create user in Supabase Auth');
       }
-      db.updateUser(editingUser);
-      db.logAction(user.id, isCreating ? 'USER_CREATE' : 'USER_UPDATE', `${isCreating ? t.createdUser : t.updatedUser}: ${editingUser.name} (${editingUser.email}), ${t.role}: ${editingUser.role}`);
-      setUsers(db.getUsers());
-      setEditingUser(null);
-      setIsCreating(false);
+      
+      console.log('✅ Auth user created with ID:', authUser.id);
+      
+      // Sačuvajte dodatne podatke u lokalnom storage-u
+      const userToSave: User = {
+        ...authUser, // Ovo već ima pravi UUID
+        staffId: editingUser.staffId || '',
+        airport: editingUser.airport || '',
+        department: editingUser.department || '',
+        jobTitle: editingUser.jobTitle || '',
+        jobDescription: editingUser.jobDescription || '',
+        phone: editingUser.phone || '',
+        // Dodajte i auth-specific polja ako želite
+        instructorScope: editingUser.instructorScope || '',
+        instructorAuthStartDate: editingUser.instructorAuthStartDate || '',
+        instructorAuthExpiry: editingUser.instructorAuthExpiry || ''
+      };
+      
+      // Sačuvajte u localStorage (za backward compatibility)
+      const localUsers = JSON.parse(localStorage.getItem('skyway_users') || '[]');
+      localUsers.push(userToSave);
+      localStorage.setItem('skyway_users', JSON.stringify(localUsers));
+      
+      // Ažurirajte state
+      setUsers([...users, userToSave]);
+      
+      // Logujte akciju
+      await db.logAction(user.id, 'USER_CREATE', 
+        `Created user: ${userToSave.name} (${userToSave.email}), Role: ${userToSave.role}`
+      );
+      
+ const message = t.userCreated || 'User created successfully';
+alert(`${message} (Temporary password: ${tempPassword})`);
+      
+    } else {
+      // Ažuriranje postojećeg korisnika
+      // Sačuvajte u localStorage
+      const localUsers = JSON.parse(localStorage.getItem('skyway_users') || '[]');
+      const index = localUsers.findIndex((u: User) => u.id === editingUser.id);
+      
+      if (index > -1) {
+        localUsers[index] = editingUser;
+      } else {
+        localUsers.push(editingUser);
+      }
+      
+      localStorage.setItem('skyway_users', JSON.stringify(localUsers));
+      
+      // Ažurirajte state
+      setUsers(localUsers);
+      
+      // Logujte akciju
+      await db.logAction(user.id, 'USER_UPDATE', 
+        `Updated user: ${editingUser.name} (${editingUser.email}), Role: ${editingUser.role}`
+      );
+      
+      alert(t.userUpdated);
     }
-  };
-
+    
+    // Resetujte stanje
+    setEditingUser(null);
+    setIsCreating(false);
+    
+  } catch (error) {
+    console.error('Error saving user:', error);
+    alert(`${t.saveError}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
   const getRoleColor = (role: UserRole) => {
     switch (role) {
       case UserRole.ADMIN: return 'bg-gradient-to-r from-red-100 to-rose-100 text-red-700';
@@ -89,6 +230,80 @@ const UserManagement: React.FC<{ user: User, lang: Language }> = ({ user, lang }
       default: return 'bg-gray-100 text-gray-700';
     }
   };
+
+  // Funkcija za uklanjanje dodeljenog kursa
+  const handleRemoveAssignment = async (assignment: UserCourseAssignment) => {
+    if (window.confirm(t.confirmRemoveAssignment || 'Are you sure you want to remove this course assignment?')) {
+      try {
+        const success = await db.removeCourseAssignment(assignment.userId, assignment.courseId);
+        if (success) {
+          // Osveži listu dodeljenih kurseva
+          await loadUserAssignments(assignment.userId);
+          alert(t.assignmentRemoved || 'Course assignment removed successfully');
+        } else {
+          alert(t.removeError || 'Error removing assignment');
+        }
+      } catch (error) {
+        console.error('Error removing assignment:', error);
+        alert(t.removeError || 'Error removing assignment');
+      }
+    }
+  };
+
+  // Funkcija za dodeljivanje kursa
+const handleAssignCourse = async () => {
+  if (!selectedCourseToAssign) {
+    alert(t.selectCourseFirst || 'Please select a course first');
+    return;
+  }
+
+  if (!editingUser) {
+    alert(t.noUserSelected || 'No user selected');
+    return;
+  }
+
+  // ⭐⭐⭐ DODAJTE VALIDACIJU ID-A ⭐⭐⭐
+  if (!editingUser.id) {
+    alert(t.userNotSaved || 'Please save the user first before assigning courses');
+    return;
+  }
+
+  console.log('Attempting to assign course:', {
+    userId: editingUser.id,
+    courseId: selectedCourseToAssign,
+    isRequired: isAssignmentRequired,
+    dueDate: assignmentDueDate,
+    assignedBy: user.id
+  });
+
+  try {
+    const assignment = await db.assignCourseToUser(
+      editingUser.id,
+      selectedCourseToAssign,
+      isAssignmentRequired,
+      assignmentDueDate || undefined,
+      user.id
+    );
+    
+    console.log('Assignment result:', assignment);
+    
+    if (assignment) {
+      await loadUserAssignments(editingUser.id);
+      
+      setShowCourseAssignmentModal(false);
+      setSelectedCourseToAssign('');
+      setAssignmentDueDate('');
+      setIsAssignmentRequired(true);
+      
+      alert(t.courseAssigned || 'Course assigned successfully');
+    } else {
+      alert(t.assignmentError || 'Error assigning course');
+    }
+  } catch (error) {
+    console.error('Error assigning course:', error);
+    alert(t.assignmentError || 'Error assigning course');
+  }
+};
 
   if (isLoading) {
     return (
@@ -313,7 +528,10 @@ const UserManagement: React.FC<{ user: User, lang: Language }> = ({ user, lang }
                     </div>
                   </div>
                   <button 
-                    onClick={() => setEditingUser(null)}
+                    onClick={() => {
+                      setEditingUser(null);
+                      setUserAssignments([]);
+                    }}
                     className="text-gray-400 hover:text-white transition-colors"
                   >
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -456,6 +674,70 @@ const UserManagement: React.FC<{ user: User, lang: Language }> = ({ user, lang }
                   </div>
                 </div>
 
+                {/* DODAJTE OVU SEKCIJU ZA DODELJENE KURSEVE */}
+                {/* Assigned Courses Section */}
+                <div className="p-5 bg-gradient-to-r from-purple-50 to-violet-50 rounded-xl border border-purple-200">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                      <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                      </svg>
+                      {t.assignedCourses || 'Assigned Courses'}
+                    </h3>
+            
+<button
+  onClick={() => setShowCourseAssignmentModal(true)}
+  className="px-4 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors text-sm flex items-center gap-2"
+  type="button"
+  disabled={!editingUser.id} // ⭐⭐⭐ ONEMOGUĆITE AKO NEMA ID ⭐⭐⭐
+>
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+  </svg>
+  {t.assignCourse || 'Assign Course'}
+</button>
+                  </div>
+                  
+                  {userAssignments.length === 0 ? (
+                    <div className="text-center py-4 text-gray-500">
+                      {t.noCoursesAssigned || 'No courses assigned to this user'}
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {userAssignments.map(assignment => (
+                        <div key={assignment.id} className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
+                          <div>
+                            <h4 className="font-medium text-gray-900">{assignment.course?.title || 'Loading...'}</h4>
+                            <div className="flex gap-3 text-xs text-gray-500 mt-1">
+                              <span className={`px-2 py-0.5 rounded ${assignment.isRequired ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
+                                {assignment.isRequired ? (t.required || 'Required') : (t.optional || 'Optional')}
+                              </span>
+                              {assignment.dueDate && (
+                                <span className="flex items-center gap-1">
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                  </svg>
+                                  Due: {new Date(assignment.dueDate).toLocaleDateString()}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => handleRemoveAssignment(assignment)}
+                            className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                            title={t.removeAssignment || 'Remove assignment'}
+                            type="button"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 {/* Administrative Authorization (for Instructors & Admins) */}
                 {(editingUser.role === UserRole.INSTRUCTOR || editingUser.role === UserRole.ADMIN) && (
                   <div className="p-5 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl border border-blue-200">
@@ -481,8 +763,8 @@ const UserManagement: React.FC<{ user: User, lang: Language }> = ({ user, lang }
                           <label className="block text-sm font-medium text-blue-700 mb-2">{t.authStartDate}</label>
                           <input 
                             type="date" 
-                            value={editingUser.instructorAuthStart || ''} 
-                            onChange={e => setEditingUser({...editingUser, instructorAuthStart: e.target.value})} 
+                            value={editingUser.instructorAuthStartDate || ''} 
+                            onChange={e => setEditingUser({...editingUser, instructorAuthStartDate: e.target.value})} 
                             className="w-full px-4 py-3 bg-white border border-blue-300 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-colors text-gray-900"
                           />
                         </div>
@@ -514,7 +796,10 @@ const UserManagement: React.FC<{ user: User, lang: Language }> = ({ user, lang }
                     {t.saveUser}
                   </button>
                   <button 
-                    onClick={() => setEditingUser(null)}
+                    onClick={() => {
+                      setEditingUser(null);
+                      setUserAssignments([]);
+                    }}
                     className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition-colors"
                   >
                     {t.cancel}
@@ -546,6 +831,104 @@ const UserManagement: React.FC<{ user: User, lang: Language }> = ({ user, lang }
           )}
         </div>
       </div>
+
+      {/* MODAL ZA DODELJIVANJE KURSEVA */}
+      {showCourseAssignmentModal && editingUser && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-gray-900">
+                {t.assignCourseToUser || 'Assign Course to User'}
+              </h3>
+              <button
+                onClick={() => {
+                  setShowCourseAssignmentModal(false);
+                  setSelectedCourseToAssign('');
+                  setAssignmentDueDate('');
+                  setIsAssignmentRequired(true);
+                }}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+                type="button"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {t.selectCourse || 'Select Course'}
+                </label>
+                <select
+                  value={selectedCourseToAssign}
+                  onChange={(e) => setSelectedCourseToAssign(e.target.value)}
+                  className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-colors text-gray-900"
+                >
+                  <option value="">{t.chooseCourse || 'Choose a course...'}</option>
+                  {courses.map(course => (
+                    <option key={course.id} value={course.id}>
+                      {course.title} - {course.category}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {t.dueDate || 'Due Date (Optional)'}
+                </label>
+                <input
+                  type="date"
+                  value={assignmentDueDate}
+                  onChange={(e) => setAssignmentDueDate(e.target.value)}
+                  className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-colors text-gray-900"
+                />
+              </div>
+              
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={isAssignmentRequired}
+                    onChange={(e) => setIsAssignmentRequired(e.target.checked)}
+                    className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-gray-700">
+                    {t.requiredCourse || 'Required course'}
+                  </span>
+                </label>
+                <span className="text-xs text-gray-500">
+                  {t.requiredExplanation || 'User must complete this course'}
+                </span>
+              </div>
+            </div>
+            
+            <div className="flex gap-3 mt-8">
+              <button
+                onClick={handleAssignCourse}
+                className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors"
+                type="button"
+              >
+                {t.assignCourse || 'Assign Course'}
+              </button>
+              <button
+                onClick={() => {
+                  setShowCourseAssignmentModal(false);
+                  setSelectedCourseToAssign('');
+                  setAssignmentDueDate('');
+                  setIsAssignmentRequired(true);
+                }}
+                className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition-colors"
+                type="button"
+              >
+                {t.cancel || 'Cancel'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

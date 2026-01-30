@@ -23,7 +23,8 @@ const CourseManagement: React.FC<{ user: User, lang: Language }> = ({ user, lang
         setIsLoading(true);
         
         // Load users from localStorage (for backward compatibility)
-        const usersData = db.getUsers();
+        const usersData = await db.getAllUsers();
+  //  const usersData = await db.getAuthUsers();
         setUsers(usersData);
         
         // Load courses from Supabase

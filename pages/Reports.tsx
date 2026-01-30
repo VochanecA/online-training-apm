@@ -35,7 +35,7 @@ const Reports: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => {
         setCourses(coursesData);
         
      
-        const usersData = db.getUsers();
+    const usersData = await db.getAllUsers();
         setUsers(usersData);
         
         // Load progress data - we need to get progress for each course/user combination

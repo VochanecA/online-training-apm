@@ -14,16 +14,34 @@ import {
   SupabaseLesson,
   SupabaseExam,
   PracticalStatus,
+  UserCourseAssignment,
   QuestionSet 
 } from './types';
-import { supabase } from './lib/supabase';
+import { supabase, supabaseAdmin } from './lib/supabase';
 
-// Helper funkcije za konverziju - KORISTI snake_case POLJA IZ SUPABASE
+// ====================
+// HELPER FUNKCIJE ZA KONVERZIJU
+// ====================
+
+const toUserCourseAssignment = (data: any): UserCourseAssignment => {
+  return {
+    id: data.id,
+    userId: data.user_id,
+    courseId: data.course_id,
+    isRequired: data.is_required ?? true,
+    dueDate: data.due_date,
+    assignedBy: data.assigned_by,
+    assignedAt: data.assigned_at, // ⭐⭐⭐ OVO JE VAŽNO ⭐⭐⭐
+    updatedAt: data.updated_at
+  };
+};
+
+// 2. Course konverzija
 const toCourse = (data: SupabaseCourse): Course => {
   console.log('DB [toCourse]: Converting course data:', {
     id: data.id,
     title: data.title,
-    instructor_id: data.instructor_id, // Ovo je ključno polje
+    instructor_id: data.instructor_id,
     category: data.category
   });
   
@@ -32,8 +50,7 @@ const toCourse = (data: SupabaseCourse): Course => {
     title: data.title,
     description: data.description,
     version: data.version,
-    category: data.category as any, // Type assertion za enum
-    // MAPIRAJTE instructor_id NA instructorId
+    category: data.category as any,
     instructorId: data.instructor_id,
     thumbnail: data.thumbnail,
     isSequential: data.is_sequential ?? true,
@@ -44,19 +61,19 @@ const toCourse = (data: SupabaseCourse): Course => {
     exam: undefined
   };
 
-  // Dodaj timestamp polja ako postoje
   if (data.created_at) course.createdAt = data.created_at;
   if (data.updated_at) course.updatedAt = data.updated_at;
 
   console.log('DB [toCourse]: Converted course:', {
     id: course.id,
     title: course.title,
-    instructorId: course.instructorId // Ovo treba da bude popunjeno
+    instructorId: course.instructorId
   });
   
   return course;
 };
 
+// 3. Lesson konverzija
 const toLesson = (data: SupabaseLesson): Lesson => {
   console.log('DB [toLesson]: Converting lesson:', {
     id: data.id,
@@ -66,7 +83,6 @@ const toLesson = (data: SupabaseLesson): Lesson => {
   
   const lesson: Lesson = {
     id: data.id,
-    // MAPIRAJTE course_id NA courseId
     courseId: data.course_id,
     title: data.title,
     description: data.description,
@@ -75,13 +91,13 @@ const toLesson = (data: SupabaseLesson): Lesson => {
     materials: data.materials || []
   };
 
-  // Dodaj timestamp polja ako postoje
   if (data.created_at) lesson.createdAt = data.created_at;
   if (data.updated_at) lesson.updatedAt = data.updated_at;
 
   return lesson;
 };
 
+// 4. Exam konverzija
 const toExam = (data: SupabaseExam): Exam => {
   console.log('DB [toExam]: Converting exam:', {
     id: data.id,
@@ -91,7 +107,6 @@ const toExam = (data: SupabaseExam): Exam => {
   
   const exam: Exam = {
     id: data.id,
-    // MAPIRAJTE course_id NA courseId
     courseId: data.course_id,
     passingScore: data.passing_score,
     timeLimitMinutes: data.time_limit_minutes,
@@ -102,13 +117,13 @@ const toExam = (data: SupabaseExam): Exam => {
     questions: data.questions || []
   };
 
-  // Dodaj timestamp polja ako postoje
   if (data.created_at) exam.createdAt = data.created_at;
   if (data.updated_at) exam.updatedAt = data.updated_at;
 
   return exam;
 };
 
+// 5. ExamAttempt konverzija
 const toExamAttempt = (data: any): ExamAttempt => {
   const attempt: ExamAttempt = {
     id: data.id,
@@ -120,7 +135,6 @@ const toExamAttempt = (data: any): ExamAttempt => {
     questionsSnapshot: data.questions_snapshot
   };
 
-  // Dodaj dodatna polja za Supabase
   if (data.user_id) attempt.userId = data.user_id;
   if (data.course_id) attempt.courseId = data.course_id;
   if (data.started_at) attempt.startedAt = data.started_at;
@@ -130,6 +144,7 @@ const toExamAttempt = (data: any): ExamAttempt => {
   return attempt;
 };
 
+// 6. Progress konverzija
 const toProgress = (data: any): Progress => {
   const progress: Progress = {
     userId: data.user_id,
@@ -150,13 +165,16 @@ const toProgress = (data: any): Progress => {
     expiryDate: data.expiry_date
   };
 
-  // Dodaj opciona polja ako postoje
   if (data.id) progress.id = data.id;
   if (data.created_at) progress.createdAt = data.created_at;
   if (data.updated_at) progress.updatedAt = data.updated_at;
 
   return progress;
 };
+
+// ====================
+// DB OBJEKT SA FUNKCIJAMA
+// ====================
 
 export const db = {
   // COURSES
@@ -202,7 +220,6 @@ export const db = {
         
         const course = toCourse(item as SupabaseCourse);
         
-        // Process lessons
         if (item.lessons && Array.isArray(item.lessons)) {
           course.lessons = item.lessons.map((lesson: any) => {
             const lessonObj = toLesson(lesson as SupabaseLesson);
@@ -211,7 +228,6 @@ export const db = {
           });
         }
 
-        // Process exam
         if (item.exam && Array.isArray(item.exam) && item.exam.length > 0) {
           const examData = item.exam[0];
           const exam = toExam(examData as SupabaseExam);
@@ -273,7 +289,6 @@ export const db = {
 
       const course = toCourse(data as SupabaseCourse);
       
-      // Process lessons
       if (data.lessons && Array.isArray(data.lessons)) {
         course.lessons = data.lessons.map((lesson: any) => {
           const lessonObj = toLesson(lesson as SupabaseLesson);
@@ -282,7 +297,6 @@ export const db = {
         });
       }
 
-      // Process exam
       if (data.exam && Array.isArray(data.exam) && data.exam.length > 0) {
         const examData = data.exam[0];
         const exam = toExam(examData as SupabaseExam);
@@ -315,14 +329,12 @@ export const db = {
         hasExam: !!course.exam
       });
       
-      // Proveri da li je ID u UUID formatu
       const isValidUUID = course.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(course.id);
       const isUpdate = course.id && isValidUUID;
       
       console.log('DB: Is valid UUID?', isValidUUID);
       console.log('DB: Is update operation?', isUpdate);
       
-      // Validacija obaveznih polja
       if (!course.title || course.title.trim() === '') {
         throw new Error('Course title is required');
       }
@@ -331,13 +343,12 @@ export const db = {
         throw new Error('Instructor ID is required');
       }
       
-      // Prepare course data for Supabase - KORISTITE snake_case
       const courseData = {
         title: course.title.trim(),
         description: course.description || '',
         version: course.version || '1.0.0',
         category: course.category,
-        instructor_id: course.instructorId, // Ovo je polje u bazi
+        instructor_id: course.instructorId,
         thumbnail: course.thumbnail || 'https://images.unsplash.com/photo-1542296332-2e4473faf563?auto=format&fit=crop&w=400&q=80',
         is_sequential: course.isSequential ?? true,
         validity_years: course.validityYears || 2,
@@ -394,28 +405,24 @@ export const db = {
       const courseId = savedCourse.id;
       console.log('DB: Saved course ID:', courseId);
 
-      // Save lessons and materials
       if (course.lessons && course.lessons.length > 0) {
         console.log('DB: Saving', course.lessons.length, 'lessons');
         await db.saveLessons(courseId, course.lessons);
         console.log('DB: Lessons saved successfully');
       } else {
         console.log('DB: No lessons to save, deleting existing lessons if any');
-        // Delete existing lessons if there are none
         await supabase
           .from('lessons')
           .delete()
           .eq('course_id', courseId);
       }
 
-      // Save exam
       if (course.exam) {
         console.log('DB: Saving exam with', course.exam.questions?.length || 0, 'questions');
         await db.saveExam(courseId, course.exam);
         console.log('DB: Exam saved successfully');
       } else {
         console.log('DB: No exam to save, deleting existing exam if any');
-        // Delete existing exam if it exists
         const { data: existingExam } = await supabase
           .from('exams')
           .select('id')
@@ -423,13 +430,11 @@ export const db = {
           .single();
         
         if (existingExam) {
-          // Delete questions first
           await supabase
             .from('questions')
             .delete()
             .eq('exam_id', existingExam.id);
           
-          // Then delete exam
           await supabase
             .from('exams')
             .delete()
@@ -439,7 +444,6 @@ export const db = {
         }
       }
 
-      // Return the saved course
       console.log('DB: Fetching saved course for return');
       const finalCourse = await db.getCourse(courseId);
       
@@ -464,7 +468,6 @@ export const db = {
     try {
       console.log('DB: Saving lessons for course:', courseId);
       
-      // Get existing lessons
       const { data: existingLessons } = await supabase
         .from('lessons')
         .select('id')
@@ -477,7 +480,6 @@ export const db = {
           .map(l => l.id)
       );
 
-      // Delete lessons that were removed
       const lessonsToDelete = [...existingLessonIds].filter(id => !newLessonIds.has(id));
       if (lessonsToDelete.length > 0) {
         console.log('DB: Deleting removed lessons:', lessonsToDelete);
@@ -487,7 +489,6 @@ export const db = {
           .in('id', lessonsToDelete);
       }
 
-      // Save or update lessons - KORISTITE snake_case
       for (const lesson of lessons) {
         const isValidUUID = lesson.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(lesson.id);
         
@@ -530,11 +531,9 @@ export const db = {
           }
         }
 
-        // Save materials
         if (lesson.materials && lesson.materials.length > 0) {
           await db.saveMaterials(lesson.id!, lesson.materials);
         } else if (lesson.id) {
-          // Delete all materials if there are none
           await supabase
             .from('materials')
             .delete()
@@ -553,7 +552,6 @@ export const db = {
     try {
       console.log('DB: Saving materials for lesson:', lessonId);
       
-      // Get existing materials
       const { data: existingMaterials } = await supabase
         .from('materials')
         .select('id')
@@ -566,7 +564,6 @@ export const db = {
           .map(m => m.id)
       );
 
-      // Delete materials that were removed
       const materialsToDelete = [...existingMaterialIds].filter(id => !newMaterialIds.has(id));
       if (materialsToDelete.length > 0) {
         console.log('DB: Deleting removed materials:', materialsToDelete);
@@ -576,7 +573,6 @@ export const db = {
           .in('id', materialsToDelete);
       }
 
-      // Save or update materials
       for (const material of materials) {
         const isValidUUID = material.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(material.id);
         
@@ -624,7 +620,6 @@ export const db = {
     try {
       console.log('DB: Saving exam for course:', courseId);
       
-      // KORISTITE snake_case za polja u bazi
       const examData = {
         course_id: courseId,
         passing_score: exam.passingScore,
@@ -636,7 +631,6 @@ export const db = {
         updated_at: new Date().toISOString()
       };
 
-      // Check if exam already exists
       const { data: existingExam } = await supabase
         .from('exams')
         .select('id')
@@ -675,7 +669,6 @@ export const db = {
         else throw new Error('Failed to create exam');
       }
 
-      // Save questions
       await db.saveQuestions(examId, exam.questions);
       console.log('DB: Exam saved successfully');
     } catch (error) {
@@ -688,13 +681,11 @@ export const db = {
     try {
       console.log('DB: Saving questions for exam:', examId, '- Count:', questions.length);
       
-      // Delete all existing questions for this exam
       await supabase
         .from('questions')
         .delete()
         .eq('exam_id', examId);
 
-      // Insert new questions - KORISTITE snake_case
       if (questions.length > 0) {
         const questionsToInsert = questions.map((q, index) => ({
           exam_id: examId,
@@ -760,7 +751,6 @@ export const db = {
 
       let data;
       if (questionSet.id) {
-        // Update existing
         const { data: updated, error } = await supabase
           .from('question_sets')
           .update(setData)
@@ -771,7 +761,6 @@ export const db = {
         if (error) throw error;
         data = updated;
       } else {
-        // Create new
         const { data: created, error } = await supabase
           .from('question_sets')
           .insert([{ ...setData, created_at: new Date().toISOString() }])
@@ -833,7 +822,6 @@ export const db = {
 
       if (!data) {
         console.log('DB: No progress found, returning empty progress');
-        // Return empty progress
         return {
           userId,
           courseId,
@@ -847,7 +835,6 @@ export const db = {
 
       console.log('DB: Found progress data:', data);
       
-      // Convert attempts
       const attempts = data.attempts?.map((attempt: any) => toExamAttempt(attempt)) || [];
 
       const progress = toProgress(data);
@@ -879,7 +866,6 @@ export const db = {
     try {
       console.log('DB: Updating progress for user:', progress.userId, 'course:', progress.courseId);
       
-      // KORISTITE snake_case za polja u bazi
       const progressData = {
         user_id: progress.userId,
         course_id: progress.courseId,
@@ -980,7 +966,6 @@ export const db = {
     try {
       console.log('DB: Saving exam attempt for user:', attempt.userId, 'course:', attempt.courseId);
       
-      // KORISTITE snake_case za polja u bazi
       const attemptData = {
         user_id: attempt.userId,
         course_id: attempt.courseId,
@@ -1024,19 +1009,141 @@ export const db = {
       return [];
     }
   },
+  // db.ts - dodajte u db objekat (negde blizu getAuthUsers)
+createAuthUser: async (email: string, password: string, name: string, role: UserRole): Promise<User | null> => {
+  try {
+    console.log('DB: Creating auth user:', { email, name, role });
+    
+    // ⭐⭐⭐ KORISTITE supabaseAdmin UMESTO supabase ⭐⭐⭐
+    const { data, error } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: {
+        name,
+        role,
+        full_name: name
+      }
+    });
+    
+    if (error) {
+      console.error('DB: Error creating auth user:', error);
+      throw error;
+    }
+    
+    if (!data.user) {
+      throw new Error('No user returned from auth creation');
+    }
+    
+    console.log('DB: Auth user created successfully with ID:', data.user.id);
+    
+    return {
+      id: data.user.id,
+      email: data.user.email || email,
+      name: data.user.user_metadata?.name || name,
+      role: (data.user.user_metadata?.role as UserRole) || role,
+      staffId: '',
+      airport: '',
+      department: '',
+      jobTitle: '',
+      jobDescription: '',
+      phone: ''
+    };
+  } catch (error) {
+    console.error('DB: Error in createAuthUser:', error);
+    return null;
+  }
+},
+// db.ts - dodajte ovu funkciju za migraciju
+migrateUsers: async (): Promise<void> => {
+  try {
+    console.log('DB: Starting user migration...');
+    
+    const localUsers = JSON.parse(localStorage.getItem('skyway_users') || '[]');
+    console.log('DB: Found', localUsers.length, 'local users');
+    
+    const migratedUsers: User[] = [];
+    
+    for (const localUser of localUsers) {
+      // Ako već ima UUID, preskočite
+      if (!localUser.id.startsWith('u-')) {
+        migratedUsers.push(localUser);
+        continue;
+      }
+      
+      console.log(`DB: Migrating user: ${localUser.email}`);
+      
+      try {
+        // Proverite da li već postoji u Auth
+        const { data: { users: authUsers } } = await supabase.auth.admin.listUsers();
+        const existingAuthUser = authUsers?.find((au: any) => au.email === localUser.email);
+        
+        if (existingAuthUser) {
+          console.log(`DB: User already exists in Auth: ${existingAuthUser.id}`);
+          // Ažurirajte ID
+          migratedUsers.push({
+            ...localUser,
+            id: existingAuthUser.id
+          });
+        } else {
+          // Kreirajte novog u Auth
+          const tempPassword = `Migrated${Date.now().toString().slice(-6)}!`;
+          const authUser = await db.createAuthUser(
+            localUser.email,
+            tempPassword,
+            localUser.name,
+            localUser.role
+          );
+          
+          if (authUser) {
+            console.log(`DB: Created auth user: ${authUser.id}`);
+            migratedUsers.push(authUser);
+          } else {
+            console.warn(`DB: Failed to create auth user for ${localUser.email}`);
+            migratedUsers.push(localUser); // Zadržite starog
+          }
+        }
+      } catch (error) {
+        console.error(`DB: Error migrating user ${localUser.email}:`, error);
+        migratedUsers.push(localUser); // Zadržite starog
+      }
+    }
+    
+    // Sačuvajte migrirane korisnike
+    localStorage.setItem('skyway_users', JSON.stringify(migratedUsers));
+    console.log('DB: Migration complete. Users:', migratedUsers.length);
+    
+    alert(`Migration complete! Migrated ${migratedUsers.length} users.`);
+    
+  } catch (error) {
+    console.error('DB: Error in migrateUsers:', error);
+    alert('Error migrating users. Check console for details.');
+  }
+},
 
   // USERS (for backward compatibility - still using localStorage)
-  getUsers: (): User[] => {
-    try {
-      const data = localStorage.getItem('skyway_users');
-      const users = data ? JSON.parse(data) : [];
-      console.log('DB [getUsers]: Found', users.length, 'users in localStorage');
-      return users;
-    } catch (error) {
-      console.error('Error getting users:', error);
+getAuthUsers: async (): Promise<User[]> => {
+  try {
+    // ⭐⭐⭐ KORISTITE supabaseAdmin ⭐⭐⭐
+    const { data: { users }, error } = await supabaseAdmin.auth.admin.listUsers();
+    if (error) {
+      console.error('Error fetching auth users:', error);
       return [];
     }
-  },
+    
+    return users.map(authUser => ({
+      id: authUser.id,
+      email: authUser.email || '',
+      name: authUser.user_metadata?.full_name || 
+            authUser.user_metadata?.name || 
+            authUser.email?.split('@')[0] || '',
+      role: (authUser.user_metadata?.role as UserRole) || UserRole.TRAINEE,
+    }));
+  } catch (error) {
+    console.error('Error in getAuthUsers:', error);
+    return [];
+  }
+},
 
   saveUsers: (users: User[]): void => {
     try {
@@ -1045,29 +1152,63 @@ export const db = {
       console.error('Error saving users:', error);
     }
   },
-
-  updateUser: (user: User): void => {
-    try {
-      const users = db.getUsers();
-      const index = users.findIndex(u => u.id === user.id);
-      if (index > -1) {
-        users[index] = user;
-      } else {
-        users.push(user);
-      }
-      db.saveUsers(users);
-    } catch (error) {
-      console.error('Error updating user:', error);
+  getAllUsers: async (): Promise<User[]> => {
+  try {
+    console.log('DB: Getting all users...');
+    
+    // Prvo pokušajte da dobijete auth korisnike
+    const authUsers = await db.getAuthUsers();
+    
+    if (authUsers && authUsers.length > 0) {
+      console.log('DB [getAllUsers]: Found', authUsers.length, 'auth users');
+      return authUsers;
     }
-  },
+    
+    console.warn('DB [getAllUsers]: No auth users found, trying localStorage...');
+    
+    // Fallback na lokalne korisnike
+    try {
+      const data = localStorage.getItem('skyway_users');
+      const localUsers = data ? JSON.parse(data) : [];
+      console.log('DB [getAllUsers]: Found', localUsers.length, 'local users');
+      return localUsers;
+    } catch (localError) {
+      console.error('DB [getAllUsers]: Error parsing local users:', localError);
+      return [];
+    }
+  } catch (error) {
+    console.error('DB [getAllUsers]: Error:', error);
+    return [];
+  }
+},
 
+// db.ts - ispravite updateUser funkciju
+updateUser: (user: User): void => {
+  try {
+    // OVA LINIJA JE PROBLEM - getUsers ne postoji
+    // const users = db.getUsers();
+    
+    // Umesto toga, koristite getAuthUsers ako vam trebaju auth korisnici
+    // ILI uklonite ovu funkciju ako ne koristite lokalne korisnike
+    console.warn('updateUser is deprecated. Use Supabase auth instead.');
+    
+    // Ako baš morate da koristite lokalne korisnike, dodajte getUsers funkciju
+    const users = JSON.parse(localStorage.getItem('skyway_users') || '[]');
+    const index = users.findIndex(u => u.id === user.id);
+    if (index > -1) {
+      users[index] = user;
+    } else {
+      users.push(user);
+    }
+    localStorage.setItem('skyway_users', JSON.stringify(users));
+  } catch (error) {
+    console.error('Error updating user:', error);
+  }
+},
   deleteCourse: async (courseId: string): Promise<boolean> => {
     try {
       console.log('DB: Deleting course:', courseId);
       
-      // Prvo obriši sve povezane podatke u pravilnom redosledu
-      
-      // 1. Obriši pitanja preko exam
       const { data: examData } = await supabase
         .from('exams')
         .select('id')
@@ -1081,7 +1222,6 @@ export const db = {
           .delete()
           .eq('exam_id', examData.id);
         
-        // 2. Obriši exam
         console.log('DB: Deleting exam:', examData.id);
         await supabase
           .from('exams')
@@ -1089,7 +1229,6 @@ export const db = {
           .eq('id', examData.id);
       }
       
-      // 3. Obriši materijale preko lessons
       const { data: lessons } = await supabase
         .from('lessons')
         .select('id')
@@ -1104,28 +1243,24 @@ export const db = {
           .in('lesson_id', lessonIds);
       }
       
-      // 4. Obriši lessons
       console.log('DB: Deleting lessons');
       await supabase
         .from('lessons')
         .delete()
         .eq('course_id', courseId);
       
-      // 5. Obriši user progress
       console.log('DB: Deleting user progress');
       await supabase
         .from('user_progress')
         .delete()
         .eq('course_id', courseId);
       
-      // 6. Obriši exam attempts
       console.log('DB: Deleting exam attempts');
       await supabase
         .from('exam_attempts')
         .delete()
         .eq('course_id', courseId);
       
-      // 7. Konačno, obriši course
       console.log('DB: Deleting course record');
       const { error } = await supabase
         .from('courses')
@@ -1212,6 +1347,237 @@ export const db = {
       });
     } catch (error) {
       console.error('Debug error:', error);
+    }
+  },
+// db.ts - dodajte ovu funkciju u db objekat (možda blizu getAuthUsers)
+
+  // USER COURSE ASSIGNMENTS
+assignCourseToUser: async (userId: string, courseId: string, isRequired: boolean = true, dueDate?: string, assignedBy?: string): Promise<UserCourseAssignment | null> => {
+  try {
+    console.log('DB: ===== START assignCourseToUser =====');
+    console.log('DB: Raw input:', { userId, courseId, isRequired, dueDate, assignedBy });
+    
+    // Validacija
+    if (!userId?.trim()) throw new Error('User ID is required');
+    if (!courseId?.trim()) throw new Error('Course ID is required');
+    
+    let finalUserId = userId;
+    
+    // Mapiranje lokalnih ID-jeva
+    if (userId.startsWith('u-')) {
+      console.log('DB: Local user ID detected');
+      
+      const localUsers = JSON.parse(localStorage.getItem('skyway_users') || '[]');
+      const localUser = localUsers.find((u: any) => u.id === userId);
+      
+      if (!localUser) throw new Error(`Local user not found: ${userId}`);
+      if (!localUser.email) throw new Error(`Local user has no email: ${userId}`);
+      
+      console.log('DB: Found local user:', localUser.email);
+      
+      try {
+        const { data: { users: authUsers } } = await supabase.auth.admin.listUsers();
+        const authUser = authUsers?.find((au: any) => au.email === localUser.email);
+        
+        if (authUser) {
+          finalUserId = authUser.id;
+          console.log('DB: Mapped to auth user ID:', finalUserId);
+        } else {
+          console.warn('DB: No auth user found, using local ID');
+        }
+      } catch (error) {
+        console.warn('DB: Cannot fetch auth users:', error);
+      }
+    }
+    
+    // Validacija UUID-ova
+    const isValidUserId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(finalUserId);
+    const isValidCourseId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(courseId);
+    
+    if (!isValidUserId) throw new Error(`Invalid user ID: ${finalUserId}`);
+    if (!isValidCourseId) throw new Error(`Invalid course ID: ${courseId}`);
+    
+    // Proverite kurs
+    const { data: courseCheck } = await supabase
+      .from('courses')
+      .select('id')
+      .eq('id', courseId)
+      .maybeSingle();
+    
+    if (!courseCheck) throw new Error(`Course not found: ${courseId}`);
+    
+    // Validacija assigned_by
+    if (assignedBy && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(assignedBy)) {
+      console.warn('DB: Invalid assigned_by UUID, setting to null');
+      assignedBy = null;
+    }
+    
+    // Proverite da li već postoji dodela
+    console.log('DB: Checking for existing assignment...');
+    const { data: existingAssignments } = await supabase
+      .from('user_course_assignments')
+      .select('*')
+      .eq('user_id', finalUserId)
+      .eq('course_id', courseId);
+    
+    console.log('DB: Existing assignments found:', existingAssignments?.length || 0);
+    
+    let result;
+    
+    if (existingAssignments && existingAssignments.length > 0) {
+      // AŽURIRAJTE POSTOJEĆU
+      console.log('DB: Updating existing assignment...');
+      
+      const existingId = existingAssignments[0].id;
+      const { data, error } = await supabase
+        .from('user_course_assignments')
+        .update({
+          is_required: isRequired,
+          due_date: dueDate || null,
+          assigned_by: assignedBy,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', existingId)
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('DB: Error updating assignment:', error);
+        throw error;
+      }
+      
+      result = data;
+      console.log('DB: Updated assignment:', result);
+    } else {
+      // KREIRAJTE NOVU
+      console.log('DB: Creating new assignment...');
+      
+      // ⭐⭐⭐ OVO JE KLJUČNO: koristite assigned_at umesto created_at ⭐⭐⭐
+      const assignmentData = {
+        user_id: finalUserId,
+        course_id: courseId,
+        is_required: isRequired,
+        due_date: dueDate || null,
+        assigned_by: assignedBy,
+        assigned_at: new Date().toISOString(), // ⭐⭐⭐ OVO JE VAŽNO ⭐⭐⭐
+        updated_at: new Date().toISOString()
+      };
+      
+      console.log('DB: Assignment data:', assignmentData);
+      
+      const { data, error } = await supabase
+        .from('user_course_assignments')
+        .insert([assignmentData])
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('DB: Error creating assignment:', error);
+        throw error;
+      }
+      
+      result = data;
+      console.log('DB: New assignment created:', result);
+    }
+    
+    console.log('DB: Success! Final result:', result);
+    console.log('DB: ===== END assignCourseToUser =====');
+    
+    return toUserCourseAssignment(result);
+  } catch (error) {
+    console.error('DB: ===== ERROR in assignCourseToUser =====');
+    console.error('DB: Full error:', error);
+    
+    if (error instanceof Error) {
+      console.error('DB: Error message:', error.message);
+      console.error('DB: Error stack:', error.stack);
+    }
+    
+    console.error('DB: ===== END ERROR =====');
+    return null;
+  }
+},
+
+  removeCourseAssignment: async (userId: string, courseId: string): Promise<boolean> => {
+    try {
+      console.log('DB: Removing course assignment:', { userId, courseId });
+      
+      const { error } = await supabase
+        .from('user_course_assignments')
+        .delete()
+        .eq('user_id', userId)
+        .eq('course_id', courseId);
+
+      if (error) {
+        console.error('DB: Error removing course assignment:', error);
+        throw error;
+      }
+      
+      console.log('DB: Course assignment removed successfully');
+      return true;
+    } catch (error) {
+      console.error('DB: Error in removeCourseAssignment:', error);
+      return false;
+    }
+  },
+
+  getUserCourseAssignments: async (userId: string): Promise<UserCourseAssignment[]> => {
+    try {
+      console.log('DB: Getting course assignments for user:', userId);
+      
+      const { data, error } = await supabase
+        .from('user_course_assignments')
+        .select(`
+          *,
+          course:courses(*)
+        `)
+        .eq('user_id', userId)
+        .order('assigned_at', { ascending: false });
+
+      if (error) {
+        console.error('DB: Error getting user course assignments:', error);
+        throw error;
+      }
+      
+      console.log('DB: Found', data?.length || 0, 'course assignments');
+      
+      return (data || []).map((item: any) => {
+        const assignment = toUserCourseAssignment(item);
+        if (item.course) {
+          assignment.course = toCourse(item.course);
+        }
+        return assignment;
+      });
+    } catch (error) {
+      console.error('DB: Error in getUserCourseAssignments:', error);
+      return [];
+    }
+  },
+
+  getUsersAssignedToCourse: async (courseId: string): Promise<User[]> => {
+    try {
+      const { data, error } = await supabase
+        .from('user_course_assignments')
+        .select(`
+          *,
+          user:auth.users(id, email, raw_user_meta_data)
+        `)
+        .eq('course_id', courseId);
+
+      if (error) throw error;
+      
+      return (data || []).map((item: any) => {
+        const userMeta = item.user?.raw_user_meta_data || {};
+        return {
+          id: item.user?.id || item.user_id,
+          email: item.user?.email || '',
+          name: userMeta.full_name || userMeta.name || '',
+          role: userMeta.role as UserRole || UserRole.TRAINEE
+        };
+      });
+    } catch (error) {
+      console.error('Error getting users assigned to course:', error);
+      return [];
     }
   }
 };

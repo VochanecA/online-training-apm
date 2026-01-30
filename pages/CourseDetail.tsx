@@ -69,26 +69,38 @@ const CourseDetail: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
       
       setProgress(progressData);
       
-      // Pronađi instruktora - OVO JE VEROVATNO PROBLEM!
-      const users = db.getUsers();
-      console.log('Total users in localStorage:', users.length);
+      // ⭐⭐⭐⭐ OVO JE VAŽAN DEO - KORISTITE AUTH USERS ⭐⭐⭐⭐
+      const authUsers = await db.getAuthUsers();
+      console.log('Total auth users from Supabase:', authUsers.length);
       
       if (foundCourse.instructorId) {
-        const foundInstructor = users.find(u => u.id === foundCourse.instructorId);
+        // Pronađite instruktora među auth korisnicima
+        const foundInstructor = authUsers.find(u => u.id === foundCourse.instructorId);
         console.log('Looking for instructor with ID:', foundCourse.instructorId);
-        console.log('Instructor found?', !!foundInstructor);
+        console.log('Instructor found in auth users?', !!foundInstructor);
         
         if (foundInstructor) {
           setInstructor(foundInstructor);
         } else {
-          console.warn('Instructor not found in localStorage for ID:', foundCourse.instructorId);
-          // Kreiraj placeholder instruktora
-          setInstructor({
-            id: foundCourse.instructorId,
-            email: 'unknown@example.com',
-            name: 'Unknown Instructor',
-            role: UserRole.INSTRUCTOR
-          });
+          console.warn('Instructor not found in auth users for ID:', foundCourse.instructorId);
+          
+          // Pokušajte da pronađete u lokalnim korisnicima kao fallback
+          const localUsers = JSON.parse(localStorage.getItem('skyway_users') || '[]');
+          const localInstructor = localUsers.find((u: User) => u.id === foundCourse.instructorId);
+          
+          if (localInstructor) {
+            console.log('Found instructor in local storage as fallback');
+            setInstructor(localInstructor);
+          } else {
+            // Kreiraj placeholder instruktora
+            console.log('Creating placeholder instructor');
+            setInstructor({
+              id: foundCourse.instructorId,
+              email: 'unknown@example.com',
+              name: 'Unknown Instructor',
+              role: UserRole.INSTRUCTOR
+            });
+          }
         }
       } else {
         console.error('CRITICAL: Course has no instructorId at all!');

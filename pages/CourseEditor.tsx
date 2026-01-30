@@ -86,10 +86,9 @@ const CourseEditor: React.FC<{ user: User; lang: Language }> = ({ user, lang }) 
       
       try {
         setIsLoading(true);
-
-        const usersData = db.getUsers();
-        console.log('Loaded users from localStorage:', usersData.length);
-        setUsers(usersData);
+const usersData = await db.getAuthUsers();
+console.log('Loaded auth users from Supabase:', usersData.length);
+setUsers(usersData);
         
         // Load courses from Supabase
         console.log('Loading courses from Supabase...');

@@ -293,3 +293,18 @@ export interface QuestionSet {
   createdAt: string;
   updatedAt: string;
 }
+
+// Dodato za required courses u types.ts
+export interface UserCourseAssignment {
+  id: string;
+  userId: string;
+  courseId: string;
+  isRequired: boolean;
+  dueDate?: string;
+  assignedBy?: string;
+  assignedAt: string;
+  updatedAt: string;
+  // Relacije (za join)
+  course?: Course;
+  assignedByUser?: User;
+}
