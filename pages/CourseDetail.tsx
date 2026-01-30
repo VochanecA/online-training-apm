@@ -17,102 +17,100 @@ const CourseDetail: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const loadCourseData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        
-        console.log('=== COURSE DETAIL LOADING ===');
-        console.log('Course ID:', id);
-        console.log('User ID:', user.id);
-        
-        if (!id) {
-          setError('Course ID not provided');
-          return;
-        }
-
-        // Učitaj kurs iz Supabase
-        console.log('Loading course from Supabase...');
-        const courses = await db.getCourses();
-        console.log('Total courses loaded:', courses.length);
-        
-        // Debug: prikaži sve kurseve
-        courses.forEach((c, idx) => {
-          console.log(`Course ${idx + 1}:`, {
-            id: c.id,
-            title: c.title,
-            instructorId: c.instructorId,
-            lessons: c.lessons?.length || 0
-          });
-        });
-        
-        const foundCourse = courses.find(c => c.id === id);
-        
-        if (!foundCourse) {
-          console.error('Course not found with ID:', id);
-          setError(`Course with ID "${id}" not found`);
-          return;
-        }
-        
-        console.log('Found course:', {
-          id: foundCourse.id,
-          title: foundCourse.title,
-          instructorId: foundCourse.instructorId,
-          lessonsCount: foundCourse.lessons.length,
-          exam: foundCourse.exam ? 'Yes' : 'No'
-        });
-        
-        setCourse(foundCourse);
-        
-        // Učitaj progress iz Supabase
-        console.log('Loading progress for user:', user.id, 'course:', foundCourse.id);
-        const progressData = await db.getProgress(user.id, foundCourse.id);
-        console.log('Progress loaded:', {
-          completedLessons: progressData.completedLessonIds.length,
-          attempts: progressData.attempts.length,
-          isCompleted: progressData.isCompleted
-        });
-        
-        setProgress(progressData);
-        
-        // Pronađi instruktora iz lokalnog storage-a
-        const users = db.getUsers();
-        console.log('Total users in localStorage:', users.length);
-        
-        if (foundCourse.instructorId) {
-          const foundInstructor = users.find(u => u.id === foundCourse.instructorId);
-          console.log('Instructor found:', foundInstructor ? {
-            id: foundInstructor.id,
-            name: foundInstructor.name,
-            role: foundInstructor.role
-          } : 'Not found');
-          
-          if (foundInstructor) {
-            setInstructor(foundInstructor);
-          } else {
-            console.warn('Instructor not found in localStorage for ID:', foundCourse.instructorId);
-            // Kreiraj placeholder instruktora ako nije pronađen
-            setInstructor({
-              id: foundCourse.instructorId,
-              email: 'unknown@example.com',
-              name: 'Unknown Instructor',
-              role: UserRole.INSTRUCTOR
-            });
-          }
-        } else {
-          console.warn('Course has no instructorId:', foundCourse.id);
-        }
-        
-      } catch (error) {
-        console.error('Error loading course data:', error);
-        setError(`Error loading course: ${error instanceof Error ? error.message : String(error)}`);
-      } finally {
-        setLoading(false);
+ const loadCourseData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      console.log('=== COURSE DETAIL LOADING ===');
+      console.log('Course ID from URL:', id);
+      console.log('User ID:', user.id);
+      
+      if (!id) {
+        console.error('Course ID is null or undefined');
+        setError('Course ID not provided');
+        return;
       }
-    };
 
-    loadCourseData();
-  }, [id, user.id]);
+      // DEBUG: Pozovi debug funkciju
+      await db.debugCourses();
+      
+      // Učitaj kurs iz Supabase
+      console.log('Loading specific course with ID:', id);
+      const foundCourse = await db.getCourse(id);
+      
+      if (!foundCourse) {
+        console.error('Course not found with ID:', id);
+        setError(`Course with ID "${id}" not found`);
+        return;
+      }
+      
+      console.log('✅ Course loaded successfully:', {
+        id: foundCourse.id,
+        title: foundCourse.title,
+        instructorId: foundCourse.instructorId,
+        instructorIdExists: !!foundCourse.instructorId
+      });
+      
+      // PROVERA: Da li instructorId postoji?
+      if (!foundCourse.instructorId) {
+        console.error('WARNING: Course has no instructorId!', foundCourse);
+      }
+      
+      setCourse(foundCourse);
+      
+      // Učitaj progress iz Supabase
+      console.log('Loading progress for user:', user.id, 'course:', foundCourse.id);
+      const progressData = await db.getProgress(user.id, foundCourse.id);
+      console.log('Progress loaded:', {
+        completedLessons: progressData.completedLessonIds?.length || 0,
+        attempts: progressData.attempts?.length || 0
+      });
+      
+      setProgress(progressData);
+      
+      // Pronađi instruktora - OVO JE VEROVATNO PROBLEM!
+      const users = db.getUsers();
+      console.log('Total users in localStorage:', users.length);
+      
+      if (foundCourse.instructorId) {
+        const foundInstructor = users.find(u => u.id === foundCourse.instructorId);
+        console.log('Looking for instructor with ID:', foundCourse.instructorId);
+        console.log('Instructor found?', !!foundInstructor);
+        
+        if (foundInstructor) {
+          setInstructor(foundInstructor);
+        } else {
+          console.warn('Instructor not found in localStorage for ID:', foundCourse.instructorId);
+          // Kreiraj placeholder instruktora
+          setInstructor({
+            id: foundCourse.instructorId,
+            email: 'unknown@example.com',
+            name: 'Unknown Instructor',
+            role: UserRole.INSTRUCTOR
+          });
+        }
+      } else {
+        console.error('CRITICAL: Course has no instructorId at all!');
+        // Stavi placeholder instructor
+        setInstructor({
+          id: 'missing-instructor',
+          email: 'no-instructor@example.com',
+          name: 'No Instructor Assigned',
+          role: UserRole.INSTRUCTOR
+        });
+      }
+      
+    } catch (error) {
+      console.error('Error loading course data:', error);
+      setError(`Error loading course: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  loadCourseData();
+}, [id, user.id]);
 
   const confirmPracticalCheck = async () => {
     if (!progress || !course || !user) return;
@@ -440,7 +438,8 @@ const CourseDetail: React.FC<{ user: User, lang: Language }> = ({ user, lang }) 
                     return (
                       <div 
                         key={lesson.id} 
-                        onClick={() => navigate(`/lesson/${course.id}/${lesson.id}`)} 
+                    // U map funkciji za lekcije u CourseDetail.tsx
+onClick={() => navigate(`/app/lesson/${course.id}/${lesson.id}`)}
                         className={`flex items-center p-4 sm:p-6 rounded-2xl border transition-all cursor-pointer group ${
                           isCompleted 
                             ? 'bg-slate-50 border-slate-100' 

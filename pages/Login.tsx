@@ -87,12 +87,14 @@ const Login: React.FC<LoginProps> = ({ lang, setLang, onLoginSuccess }) => {
     }
   ];
 
-  const handleLoginSuccess = () => {
-    setShowLoginModal(false);
-    if (onLoginSuccess) {
-      onLoginSuccess();
-    }
-  };
+// U Login.tsx, promijeni handleLoginSuccess funkciju:
+const handleLoginSuccess = () => {
+  setShowLoginModal(false);
+  if (onLoginSuccess) {
+    onLoginSuccess();
+  }
+  navigate('/app'); // Dodaj ovu liniju
+};
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-white via-blue-50/30 to-white">

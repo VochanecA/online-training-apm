@@ -1,52 +1,102 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState,useRef , useEffect } from 'react';
 
 interface PDFViewerProps {
   url: string;
   title: string;
+  onActivityChange?: (isActive: boolean) => void; // Dodaj ovaj prop
 }
 
-const PDFViewer: React.FC<PDFViewerProps> = ({ url, title }) => {
+const PDFViewer: React.FC<PDFViewerProps> = ({ url, title, onActivityChange }) => {
   const [pageNumber, setPageNumber] = useState(1);
   const [numPages, setNumPages] = useState<number | null>(null);
   const [scale, setScale] = useState(1);
   const [error, setError] = useState(false);
+  const activityTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastActivityRef = useRef<number>(Date.now());
 
   // Formatirajte URL za PDF
   const formattedUrl = url.startsWith('http') 
     ? url 
     : `https://docs.google.com/viewer?url=${encodeURIComponent(url)}&embedded=true`;
 
+  useEffect(() => {
+    // Početak aktivnosti kada se PDF učita
+    onActivityChange?.(true);
+    lastActivityRef.current = Date.now();
+
+    // Praćenje aktivnosti korisnika
+    const handleActivity = () => {
+      lastActivityRef.current = Date.now();
+      onActivityChange?.(true);
+    };
+
+    // Dodaj event listenere za praćenje aktivnosti
+    window.addEventListener('mousemove', handleActivity);
+    window.addEventListener('keydown', handleActivity);
+    window.addEventListener('scroll', handleActivity);
+    window.addEventListener('click', handleActivity);
+
+    // Timer za proveru neaktivnosti
+    activityTimerRef.current = setInterval(() => {
+      const now = Date.now();
+      if (now - lastActivityRef.current > 30000) { // 30 sekundi neaktivnosti
+        onActivityChange?.(false);
+      }
+    }, 5000);
+
+    return () => {
+      onActivityChange?.(false);
+      if (activityTimerRef.current) {
+        clearInterval(activityTimerRef.current);
+      }
+      window.removeEventListener('mousemove', handleActivity);
+      window.removeEventListener('keydown', handleActivity);
+      window.removeEventListener('scroll', handleActivity);
+      window.removeEventListener('click', handleActivity);
+    };
+  }, [onActivityChange]);
+
   const handleLoad = () => {
-    // Ova funkcija se može koristiti za tracking PDF load-a
     console.log('PDF loaded');
   };
 
   const handleError = () => {
     setError(true);
+    onActivityChange?.(false);
   };
 
   const nextPage = () => {
     if (numPages && pageNumber < numPages) {
       setPageNumber(pageNumber + 1);
+      onActivityChange?.(true);
+      lastActivityRef.current = Date.now();
     }
   };
 
   const prevPage = () => {
     if (pageNumber > 1) {
       setPageNumber(pageNumber - 1);
+      onActivityChange?.(true);
+      lastActivityRef.current = Date.now();
     }
   };
 
   const zoomIn = () => {
     setScale(prev => Math.min(prev + 0.25, 3));
+    onActivityChange?.(true);
+    lastActivityRef.current = Date.now();
   };
 
   const zoomOut = () => {
     setScale(prev => Math.max(prev - 0.25, 0.5));
+    onActivityChange?.(true);
+    lastActivityRef.current = Date.now();
   };
 
   const resetZoom = () => {
     setScale(1);
+    onActivityChange?.(true);
+    lastActivityRef.current = Date.now();
   };
 
   if (error) {
@@ -58,12 +108,15 @@ const PDFViewer: React.FC<PDFViewerProps> = ({ url, title }) => {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Unable to load PDF</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            Unable to load PDF
+          </h3>
           <p className="text-gray-600 mb-4">Please try downloading the document instead.</p>
           <a
             href={url}
             download
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            onClick={() => onActivityChange?.(true)}
           >
             Download PDF
           </a>
@@ -137,7 +190,13 @@ const PDFViewer: React.FC<PDFViewerProps> = ({ url, title }) => {
       </div>
 
       {/* PDF Viewer */}
-      <div className="flex-1 overflow-auto bg-gray-900 p-4">
+      <div 
+        className="flex-1 overflow-auto bg-gray-900 p-4"
+        onClick={() => {
+          onActivityChange?.(true);
+          lastActivityRef.current = Date.now();
+        }}
+      >
         <div 
           className="bg-white mx-auto shadow-2xl" 
           style={{ 
@@ -165,6 +224,9 @@ const PDFViewer: React.FC<PDFViewerProps> = ({ url, title }) => {
             <li>• Zoom in/out for better readability</li>
             <li>• The PDF may take a moment to load depending on size</li>
             <li>• If the PDF doesn't load, try downloading it</li>
+            <li className="text-green-600 font-medium">
+              ⏱️ Active learning time is being tracked
+            </li>
           </ul>
         </div>
       </div>

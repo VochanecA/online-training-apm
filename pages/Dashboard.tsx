@@ -186,7 +186,7 @@ const Dashboard: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => 
                     </p>
                   </div>
                   <button 
-                    onClick={() => navigate(`/course/${warn.refresherId || warn.courseId}`)}
+                  onClick={() => navigate(`/app/course/${warn.refresherId || warn.courseId}`)}
                     className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all hover:scale-105 ${
                       warn.days < 0 
                         ? 'bg-gradient-to-r from-red-600 to-pink-600 text-white' 
@@ -305,7 +305,7 @@ const Dashboard: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => 
               return (
                 <div 
                   key={course.id}
-                  onClick={() => navigate(`/course/${course.id}`)}
+               onClick={() => navigate(`/app/course/${course.id}`)}
                   className="group bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer hover:-translate-y-1"
                 >
                   <div className="relative h-40 md:h-48 overflow-hidden">

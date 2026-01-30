@@ -1,284 +1,9 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { db } from '../db';
 import { Course, Lesson, Progress, User, Material } from '../types';
 import { Language, translations } from '../translations';
-
-
-// PDF Viewer komponenta
-// PDF Viewer komponenta - JEDNOSTAVNO RJEŠENJE
-const PDFViewer: React.FC<{ 
-  url: string; 
-  title: string;
-  onClose: () => void;
-  lang: Language;
-  allowDownload: boolean;
-  onActiveTimeChange: (isActive: boolean) => void;
-}> = ({ url, title, onClose, lang, allowDownload, onActiveTimeChange }) => {
-  const [currentPage, setCurrentPage] = useState(1);
-  const [numPages, setNumPages] = useState<number | null>(null);
-  const [scale, setScale] = useState(1.0);
-  const [isLoading, setIsLoading] = useState(true);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const activityTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const lastActivityRef = useRef<number>(Date.now());
-  const isActiveRef = useRef<boolean>(true);
-
-  useEffect(() => {
-    onActiveTimeChange(true);
-    lastActivityRef.current = Date.now();
-    isActiveRef.current = true;
-
-    // Aktivnosti koje resetuju timer neaktivnosti
-    const handleActivity = () => {
-      lastActivityRef.current = Date.now();
-      if (!isActiveRef.current) {
-        isActiveRef.current = true;
-        onActiveTimeChange(true);
-      }
-    };
-
-    // Dodaj event listenere
-    window.addEventListener('mousemove', handleActivity);
-    window.addEventListener('keydown', handleActivity);
-    window.addEventListener('scroll', handleActivity);
-    window.addEventListener('click', handleActivity);
-
-    // Timer za proveru neaktivnosti
-    activityTimerRef.current = setInterval(() => {
-      const now = Date.now();
-      if (isActiveRef.current && (now - lastActivityRef.current) > 30000) {
-        isActiveRef.current = false;
-        onActiveTimeChange(false);
-      }
-    }, 5000);
-
-    // Sakrij loading nakon 1 sekunde
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-      setNumPages(10); // Pretpostavka
-    }, 1000);
-
-    return () => {
-      onActiveTimeChange(false);
-      if (activityTimerRef.current) {
-        clearInterval(activityTimerRef.current);
-      }
-      clearTimeout(timer);
-      window.removeEventListener('mousemove', handleActivity);
-      window.removeEventListener('keydown', handleActivity);
-      window.removeEventListener('scroll', handleActivity);
-      window.removeEventListener('click', handleActivity);
-    };
-  }, [url, onActiveTimeChange]);
-
-  const nextPage = () => {
-    if (numPages && currentPage < numPages) {
-      setCurrentPage(prev => prev + 1);
-      lastActivityRef.current = Date.now();
-    }
-  };
-
-  const prevPage = () => {
-    if (currentPage > 1) {
-      setCurrentPage(prev => prev - 1);
-      lastActivityRef.current = Date.now();
-    }
-  };
-
-  const zoomIn = () => {
-    setScale(prev => Math.min(prev + 0.25, 3));
-    lastActivityRef.current = Date.now();
-  };
-
-  const zoomOut = () => {
-    setScale(prev => Math.max(prev - 0.25, 0.5));
-    lastActivityRef.current = Date.now();
-  };
-
-  const handleScaleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const newScale = parseFloat(e.target.value);
-    setScale(newScale);
-    lastActivityRef.current = Date.now();
-  };
-
-  // Stil za embed koji se skalira
-  const embedStyle = {
-    width: '100%',
-    height: '100%',
-    border: 'none',
-  };
-
-  return (
-    <div 
-      className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4"
-      onClick={() => lastActivityRef.current = Date.now()}
-    >
-      <div className="relative bg-white rounded-2xl overflow-hidden w-full max-w-6xl h-[90vh] flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 bg-gray-900 text-white">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={onClose}
-              className="p-2 hover:bg-gray-800 rounded-lg transition-colors"
-              title={lang === 'en' ? 'Close' : 'Zatvori'}
-              type="button"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-            <div>
-              <h3 className="font-semibold">{title}</h3>
-              <p className="text-sm text-gray-400">
-                {lang === 'en' ? 'PDF Viewer' : 'PDF pregled'} • {lang === 'en' ? 'Page' : 'Strana'} {currentPage} {numPages && `/${numPages}`}
-                {!isActiveRef.current && (
-                  <span className="ml-2 text-amber-400">
-                    ⏸️ {lang === 'en' ? 'Paused' : 'Pauzirano'}
-                  </span>
-                )}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2 bg-gray-800 px-3 py-1 rounded-lg">
-              <button
-                onClick={zoomOut}
-                className="p-1 hover:bg-gray-700 rounded"
-                title={lang === 'en' ? 'Zoom Out' : 'Umanji'}
-                type="button"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
-                </svg>
-              </button>
-              <span className="text-sm">{(scale * 100).toFixed(0)}%</span>
-              <button
-                onClick={zoomIn}
-                className="p-1 hover:bg-gray-700 rounded"
-                title={lang === 'en' ? 'Zoom In' : 'Povećaj'}
-                type="button"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-              </button>
-            </div>
-            {allowDownload && (
-              <a
-                href={url}
-                download
-                className="p-2 hover:bg-gray-800 rounded-lg transition-colors"
-                title={lang === 'en' ? 'Download' : 'Preuzmi'}
-                onClick={() => lastActivityRef.current = Date.now()}
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                </svg>
-              </a>
-            )}
-          </div>
-        </div>
-
-        {/* PDF Content - JEDNOSTAVNO RJEŠENJE */}
-        <div className="flex-1 bg-gray-100 relative overflow-hidden" ref={containerRef}>
-          {/* Loading overlay koji se automatski sakriva nakon 1 sekunde */}
-          {isLoading && (
-            <div className="absolute inset-0 flex items-center justify-center bg-white z-10">
-              <div className="text-center">
-                <div className="w-16 h-16 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin mx-auto mb-4" />
-                <p className="text-gray-700 font-medium">
-                  {lang === 'en' ? 'Loading PDF...' : 'Učitavanje PDF-a...'}
-                </p>
-                <p className="text-gray-500 text-sm mt-2">
-                  {lang === 'en' ? 'This may take a moment' : 'Ovo može potrajati nekoliko trenutaka'}
-                </p>
-              </div>
-            </div>
-          )}
-          
-          {/* Direktan embed sa Google Docs pregledom (najpouzdanije) */}
-          <div className="w-full h-full">
-            {/* Prvo pokušaj sa Google Docs viewerom (najbolje za prikaz) */}
-            <iframe
-              src={`https://docs.google.com/viewer?url=${encodeURIComponent(url)}&embedded=true`}
-              title={title}
-              className="w-full h-full border-none"
-              style={embedStyle}
-            />
-            
-            {/* Fallback za download ako iframe ne radi */}
-            <div className="hidden">
-              <a href={url} download={title}>
-                {lang === 'en' ? 'Download PDF' : 'Preuzmi PDF'}
-              </a>
-            </div>
-          </div>
-        </div>
-
-        {/* Footer - Navigation */}
-        <div className="p-4 bg-gray-900 text-white">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={prevPage}
-                disabled={currentPage <= 1}
-                className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-                type="button"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-                {lang === 'en' ? 'Previous' : 'Prethodna'}
-              </button>
-              <button
-                onClick={nextPage}
-                disabled={!!numPages && currentPage >= numPages}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-                type="button"
-              >
-                {lang === 'en' ? 'Next' : 'Sledeća'}
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-            </div>
-            
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <span className="text-sm">{lang === 'en' ? 'Page:' : 'Strana:'}</span>
-                <div className="w-16 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-center">
-                  {currentPage}
-                </div>
-                <span className="text-gray-400">/ {numPages || '?'}</span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <select
-                value={scale.toFixed(2)}
-                onChange={handleScaleChange}
-                className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm"
-              >
-                <option value="1.0">100%</option>
-                <option value="1.25">125%</option>
-                <option value="1.5">150%</option>
-                <option value="2.0">200%</option>
-              </select>
-            </div>
-          </div>
-          
-          {/* Napomena za korisnika */}
-          <div className="text-center text-gray-400 text-xs mt-2">
-            {lang === 'en' 
-              ? 'Note: Using Google Docs viewer for reliable PDF display'
-              : 'Napomena: Koristi se Google Docs pregled za pouzdan prikaz PDF-a'}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
+import PDFViewer from '../components/PDFViewer';
 
 // Video Viewer komponenta
 const VideoViewer: React.FC<{ 
@@ -299,11 +24,10 @@ const VideoViewer: React.FC<{
   const isActiveRef = useRef<boolean>(true);
 
   useEffect(() => {
-    onActiveTimeChange(true); // Započni praćenje vremena kada se video otvori
+    onActiveTimeChange(true);
     lastActivityRef.current = Date.now();
     isActiveRef.current = true;
 
-    // Aktivnosti koje resetuju timer neaktivnosti
     const handleActivity = () => {
       lastActivityRef.current = Date.now();
       if (!isActiveRef.current) {
@@ -315,7 +39,6 @@ const VideoViewer: React.FC<{
     window.addEventListener('mousemove', handleActivity);
     window.addEventListener('keydown', handleActivity);
 
-    // Timer za proveru neaktivnosti
     activityTimerRef.current = setInterval(() => {
       const now = Date.now();
       if (isActiveRef.current && (now - lastActivityRef.current) > 30000) {
@@ -325,7 +48,7 @@ const VideoViewer: React.FC<{
     }, 5000);
 
     return () => {
-      onActiveTimeChange(false); // Zaustavi praćenje vremena
+      onActiveTimeChange(false);
       if (activityTimerRef.current) {
         clearInterval(activityTimerRef.current);
       }
@@ -340,14 +63,14 @@ const VideoViewer: React.FC<{
 
     const handleTimeUpdate = () => {
       setCurrentTime(video.currentTime);
-      lastActivityRef.current = Date.now(); // Video se reprodukuje = aktivnost
+      lastActivityRef.current = Date.now();
     };
     
     const handleLoadedMetadata = () => setDuration(video.duration);
     const handleEnded = () => setIsPlaying(false);
     const handlePlay = () => {
       setIsPlaying(true);
-      onActiveTimeChange(true); // Video se reprodukuje = aktivno
+      onActiveTimeChange(true);
       isActiveRef.current = true;
     };
     const handlePause = () => setIsPlaying(false);
@@ -410,7 +133,6 @@ const VideoViewer: React.FC<{
       onClick={() => lastActivityRef.current = Date.now()}
     >
       <div className="relative bg-black rounded-2xl overflow-hidden w-full max-w-6xl h-[90vh] flex flex-col">
-        {/* Header */}
         <div className="flex items-center justify-between p-4 bg-gray-900/90 text-white">
           <div className="flex items-center gap-4">
             <button
@@ -445,7 +167,6 @@ const VideoViewer: React.FC<{
           )}
         </div>
 
-        {/* Video Content */}
         <div className="flex-1 relative">
           <video
             ref={videoRef}
@@ -455,10 +176,8 @@ const VideoViewer: React.FC<{
             controls={false}
           />
           
-          {/* Custom Controls */}
           <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-4">
             <div className="space-y-3">
-              {/* Progress Bar */}
               <div className="w-full">
                 <input
                   type="range"
@@ -477,7 +196,6 @@ const VideoViewer: React.FC<{
                 </div>
               </div>
 
-              {/* Control Buttons */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <button
@@ -554,7 +272,7 @@ const PowerPointViewer: React.FC<{
   const isActiveRef = useRef<boolean>(true);
 
   useEffect(() => {
-    onActiveTimeChange(true); // Započni praćenje vremena
+    onActiveTimeChange(true);
     lastActivityRef.current = Date.now();
     isActiveRef.current = true;
 
@@ -641,7 +359,6 @@ const PowerPointViewer: React.FC<{
         ref={viewerRef}
         className="relative bg-white rounded-2xl overflow-hidden w-full max-w-6xl h-[90vh] flex flex-col"
       >
-        {/* Header */}
         <div className="flex items-center justify-between p-4 bg-gray-900 text-white">
           <div className="flex items-center gap-4">
             <button
@@ -701,7 +418,6 @@ const PowerPointViewer: React.FC<{
           </div>
         </div>
 
-        {/* Slide Content */}
         <div className="flex-1 bg-gray-100 relative flex items-center justify-center">
           <button
             onClick={prevSlide}
@@ -751,7 +467,6 @@ const PowerPointViewer: React.FC<{
           </button>
         </div>
 
-        {/* Footer - Controls */}
         <div className="p-4 bg-gray-900 text-white">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -833,11 +548,9 @@ const LessonView: React.FC<{ user: User; lang: Language }> = ({ user, lang }) =>
   const [isLoading, setIsLoading] = useState(true);
   const [fileInfos, setFileInfos] = useState<Record<string, FileInfo>>({});
   
-  // State for viewers
   const [activeViewer, setActiveViewer] = useState<'pdf' | 'video' | 'pptx' | null>(null);
   const [activeMaterial, setActiveMaterial] = useState<Material | null>(null);
   
-  // Timer references
   const activeLearningTimerRef = useRef<NodeJS.Timeout | null>(null);
   const saveProgressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [isLearningActive, setIsLearningActive] = useState(false);
@@ -855,7 +568,6 @@ const LessonView: React.FC<{ user: User; lang: Language }> = ({ user, lang }) =>
         
         console.log('Loading course:', courseId);
         
-        // Load course from Supabase
         const courseData = await db.getCourse(courseId);
         if (!courseData) {
           console.error('Course not found:', courseId);
@@ -867,7 +579,6 @@ const LessonView: React.FC<{ user: User; lang: Language }> = ({ user, lang }) =>
         console.log('Course loaded:', courseData.title);
         setCourse(courseData);
         
-        // Find lesson
         const lessonData = courseData.lessons.find(x => x.id === lessonId);
         if (!lessonData) {
           console.error('Lesson not found:', lessonId);
@@ -879,25 +590,21 @@ const LessonView: React.FC<{ user: User; lang: Language }> = ({ user, lang }) =>
         console.log('Lesson found:', lessonData.title);
         setLesson(lessonData);
         
-        // Load file information for all materials with URLs
         const fileInfoMap: Record<string, FileInfo> = {};
         
         for (const material of lessonData.materials) {
           try {
             if (material.url && material.url.startsWith('http')) {
-              // Get base filename from URL
               const urlParts = material.url.split('/');
               const fileName = urlParts[urlParts.length - 1];
               const decodedFileName = decodeURIComponent(fileName);
               
-              // Clean up the filename - remove timestamp prefix
               let displayName = decodedFileName;
               const underscoreIndex = decodedFileName.indexOf('_');
               if (underscoreIndex !== -1) {
                 displayName = decodedFileName.substring(underscoreIndex + 1);
               }
               
-              // Get file type from material type
               let fileType = 'application/octet-stream';
               if (material.type === 'pdf') {
                 fileType = 'application/pdf';
@@ -918,35 +625,29 @@ const LessonView: React.FC<{ user: User; lang: Language }> = ({ user, lang }) =>
             }
           } catch (error) {
             console.warn(`Error processing file info for material ${material.id}:`, error);
-            // Continue with other materials even if one fails
           }
         }
         
         setFileInfos(fileInfoMap);
         
-        // Load progress from Supabase
         try {
           const progressData = await db.getProgress(user.id, courseId);
           console.log('Progress data loaded:', progressData);
           
           setProgress(progressData);
           
-          // Load previous active learning time on this lesson
           const previousTimeSpent = progressData.lessonTimeSpent?.[lessonId] || 0;
           console.log('Previous active learning time on lesson:', previousTimeSpent, 'seconds');
           
           setTotalTimeSpent(previousTimeSpent);
-          setActiveLearningSeconds(0); // Reset active learning timer
+          setActiveLearningSeconds(0);
           
-          // Check if lesson is already completed
           const isLessonCompleted = progressData.completedLessonIds?.includes(lessonId);
           
-          // Logic for min learning time - only if lesson is not completed
           if (!isLessonCompleted) {
             const startStr = progressData.lessonStartTimes?.[lessonId];
             const startTime = startStr ? new Date(startStr).getTime() : Date.now();
             
-            // If lesson hasn't been started yet, record start time
             if (!startStr) {
               console.log('Recording new start time for lesson');
               const updatedStartTimes = {
@@ -965,7 +666,6 @@ const LessonView: React.FC<{ user: User; lang: Language }> = ({ user, lang }) =>
               console.log('Existing start time found:', startStr);
             }
 
-            // Calculate remaining time based on ACTIVE learning time
             const requiredSeconds = (lessonData.minLearningTimeMinutes || 0) * 60;
             const remaining = Math.max(0, requiredSeconds - previousTimeSpent);
             
@@ -978,7 +678,6 @@ const LessonView: React.FC<{ user: User; lang: Language }> = ({ user, lang }) =>
             
             setSecondsRemaining(remaining);
             
-            // If the lesson was already completed, don't require more time
             if (isLessonCompleted) {
               setSecondsRemaining(0);
             }
@@ -988,7 +687,6 @@ const LessonView: React.FC<{ user: User; lang: Language }> = ({ user, lang }) =>
           }
         } catch (progressError) {
           console.error('Error loading progress:', progressError);
-          // Continue without progress data
         }
         
       } catch (error) {
@@ -1003,11 +701,9 @@ const LessonView: React.FC<{ user: User; lang: Language }> = ({ user, lang }) =>
     void loadData();
   }, [courseId, lessonId, user.id, lang, navigate]);
 
-  // Handle active learning timer
   useEffect(() => {
     if (!lessonId || !progress) return;
 
-    // Clear existing timers
     if (activeLearningTimerRef.current) {
       clearInterval(activeLearningTimerRef.current);
     }
@@ -1015,18 +711,15 @@ const LessonView: React.FC<{ user: User; lang: Language }> = ({ user, lang }) =>
       clearInterval(saveProgressTimerRef.current);
     }
 
-    // Start active learning timer only when isLearningActive is true
     if (isLearningActive) {
       activeLearningTimerRef.current = setInterval(() => {
         setActiveLearningSeconds(prev => {
           const newTime = prev + 1;
           
-          // Update remaining time
           if (secondsRemaining > 0) {
             setSecondsRemaining(prevRemaining => Math.max(0, prevRemaining - 1));
           }
           
-          // Auto-save every 30 seconds
           if (newTime % 30 === 0) {
             saveProgressToSupabase(newTime);
           }
@@ -1036,7 +729,6 @@ const LessonView: React.FC<{ user: User; lang: Language }> = ({ user, lang }) =>
       }, 1000);
     }
 
-    // Also save progress periodically as backup
     saveProgressTimerRef.current = setInterval(() => {
       if (isLearningActive && activeLearningSeconds > 0) {
         saveProgressToSupabase(activeLearningSeconds);
@@ -1051,30 +743,25 @@ const LessonView: React.FC<{ user: User; lang: Language }> = ({ user, lang }) =>
         clearInterval(saveProgressTimerRef.current);
       }
       
-      // Save progress when component unmounts if there was active learning
       if (isLearningActive && activeLearningSeconds > 0 && progress && lessonId) {
         saveProgressToSupabase(activeLearningSeconds, true);
       }
     };
   }, [isLearningActive, progress, lessonId, secondsRemaining]);
 
-  // Handle active time changes from viewers
   const handleActiveTimeChange = (isActive: boolean) => {
     console.log('Learning activity changed:', isActive ? 'ACTIVE' : 'INACTIVE');
     setIsLearningActive(isActive);
     
     if (!isActive && activeLearningSeconds > 0) {
-      // Save progress when learning becomes inactive
       saveProgressToSupabase(activeLearningSeconds);
     }
   };
 
-  // Function to save progress to Supabase
   const saveProgressToSupabase = async (currentActiveSeconds: number, isFinalSave = false) => {
     if (!progress || !lessonId) return;
     
     try {
-      // Calculate total active time spent (previous + current session)
       const previousTimeSpent = progress.lessonTimeSpent?.[lessonId] || 0;
       const newTimeSpent = previousTimeSpent + currentActiveSeconds;
       
@@ -1102,7 +789,6 @@ const LessonView: React.FC<{ user: User; lang: Language }> = ({ user, lang }) =>
       
       console.log('Active learning progress saved successfully to Supabase');
       
-      // If this is the final save, reset active learning timer
       if (isFinalSave) {
         setActiveLearningSeconds(0);
       }
@@ -1115,13 +801,13 @@ const LessonView: React.FC<{ user: User; lang: Language }> = ({ user, lang }) =>
   const openViewer = (material: Material, type: 'pdf' | 'video' | 'pptx'): void => {
     setActiveMaterial(material);
     setActiveViewer(type);
-    // Timer će početi kada se otvori viewer (handleActiveTimeChange će se pozvati)
+    setIsLearningActive(true);
   };
 
   const closeViewer = (): void => {
     setActiveViewer(null);
     setActiveMaterial(null);
-    setIsLearningActive(false); // Zaustavi praćenje vremena kada se viewer zatvori
+    setIsLearningActive(false);
   };
 
   const handleComplete = async (): Promise<void> => {
@@ -1218,7 +904,6 @@ const LessonView: React.FC<{ user: User; lang: Language }> = ({ user, lang }) =>
     );
   };
 
-  // Helper to check if download should be allowed
   const isDownloadAllowed = () => {
     return secondsRemaining === 0;
   };
@@ -1259,16 +944,78 @@ const LessonView: React.FC<{ user: User; lang: Language }> = ({ user, lang }) =>
 
   return (
     <>
-      {/* PDF Viewer */}
+      {/* PDF Viewer - SADA KORISTI KOMPONENTU */}
       {activeViewer === 'pdf' && activeMaterial && (
-        <PDFViewer
-          url={activeMaterial.url}
-          title={activeMaterial.title}
-          onClose={closeViewer}
-          lang={lang}
-          allowDownload={isDownloadAllowed()}
-          onActiveTimeChange={handleActiveTimeChange}
-        />
+        <div 
+          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => handleActiveTimeChange(true)}
+        >
+          <div className="relative bg-white rounded-2xl overflow-hidden w-full max-w-6xl h-[90vh] flex flex-col">
+            {/* Header sa tajmerom */}
+            <div className="flex items-center justify-between p-4 bg-gray-900 text-white">
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={closeViewer}
+                  className="p-2 hover:bg-gray-800 rounded-lg transition-colors"
+                  title={lang === 'en' ? 'Close' : 'Zatvori'}
+                  type="button"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+                <div>
+                  <h3 className="font-semibold">{activeMaterial.title}</h3>
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-gray-400">
+                      {lang === 'en' ? 'PDF Viewer' : 'PDF pregled'}
+                    </span>
+                    {!isLearningActive && (
+                      <span className="text-amber-400 ml-2">
+                        ⏸️ {lang === 'en' ? 'Paused' : 'Pauzirano'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              
+              {/* Active learning timer display */}
+              <div className="flex items-center gap-3">
+                <div className={`px-3 py-1 rounded-lg ${isLearningActive ? 'bg-green-900/30 text-green-400' : 'bg-gray-800 text-gray-400'}`}>
+                  <div className="flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full ${isLearningActive ? 'bg-green-400 animate-pulse' : 'bg-gray-500'}`} />
+                    <span className="text-sm font-medium">
+                      {formatTime(totalTimeSpent + activeLearningSeconds)} {lang === 'en' ? 'active' : 'aktivno'}
+                    </span>
+                  </div>
+                </div>
+                
+                {isDownloadAllowed() && (
+                  <a
+                    href={activeMaterial.url}
+                    download={activeMaterial.fileName || activeMaterial.title}
+                    className="p-2 hover:bg-gray-800 rounded-lg transition-colors"
+                    title={lang === 'en' ? 'Download' : 'Preuzmi'}
+                    onClick={() => handleActiveTimeChange(true)}
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                  </a>
+                )}
+              </div>
+            </div>
+
+            {/* PDF Content */}
+            <div className="flex-1 bg-gray-900">
+              <PDFViewer 
+                url={activeMaterial.url} 
+                title={activeMaterial.title}
+                onActivityChange={handleActiveTimeChange}
+              />
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Video Viewer */}
@@ -1321,7 +1068,7 @@ const LessonView: React.FC<{ user: User; lang: Language }> = ({ user, lang }) =>
       <div className="max-w-6xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
         <div className="mb-6">
           <button 
-            onClick={() => navigate(`/course/${course.id}`)}
+            onClick={() => navigate(`/app/course/${course.id}`)}
             className="inline-flex items-center text-gray-600 hover:text-gray-900 font-medium text-sm transition-colors"
             type="button"
           >
@@ -1333,7 +1080,6 @@ const LessonView: React.FC<{ user: User; lang: Language }> = ({ user, lang }) =>
         </div>
 
         <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden">
-          {/* Header */}
           <div className="p-6 border-b border-gray-200">
             <div className="flex flex-col lg:flex-row justify-between gap-4">
               <div>
@@ -1374,7 +1120,6 @@ const LessonView: React.FC<{ user: User; lang: Language }> = ({ user, lang }) =>
             </div>
           </div>
 
-          {/* Lesson Content */}
           <div className="p-6">
             <div className="space-y-8">
               {lesson.materials.length === 0 ? (
@@ -1434,7 +1179,6 @@ const LessonView: React.FC<{ user: User; lang: Language }> = ({ user, lang }) =>
                         </div>
                       </div>
 
-                      {/* Content Based on Type */}
                       {material.type === 'video' && (
                         <div className="bg-gradient-to-br from-red-50 to-pink-50 border-2 border-dashed border-red-200 rounded-xl p-6 sm:p-8">
                           <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-md">
@@ -1610,7 +1354,6 @@ const LessonView: React.FC<{ user: User; lang: Language }> = ({ user, lang }) =>
                         </div>
                       )}
 
-                      {/* File info card for uploaded files */}
                       {fileInfo && (
                         <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
                           <div className="flex items-center justify-between">
@@ -1687,7 +1430,6 @@ const LessonView: React.FC<{ user: User; lang: Language }> = ({ user, lang }) =>
             </div>
           </div>
 
-          {/* Footer */}
           <div className="p-6 bg-gray-50 border-t border-gray-200">
             <div className="flex flex-col sm:flex-row justify-between items-center gap-6">
               <div className="flex items-center gap-3">
