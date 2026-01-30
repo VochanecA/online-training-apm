@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../db';
-import { Course, User, Progress, UserRole } from '../types';
+import { Course, User, Progress, UserRole, UserCourseAssignment } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { Language, translations } from '../translations';
 
@@ -9,6 +9,7 @@ const Dashboard: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => 
   const t = translations[lang];
   const [courses, setCourses] = useState<Course[]>([]);
   const [allProgress, setAllProgress] = useState<Progress[]>([]);
+  const [userAssignments, setUserAssignments] = useState<UserCourseAssignment[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
 
@@ -27,6 +28,12 @@ const Dashboard: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => 
         
         const userProgressResults = await Promise.all(userProgressPromises);
         setAllProgress(userProgressResults.filter(p => p !== null) as Progress[]);
+
+        // Load user course assignments
+        const assignments = await db.getUserCourseAssignments(user.id);
+        setUserAssignments(assignments);
+        console.log('User assignments loaded:', assignments.length);
+        
       } catch (error) {
         console.error('Error loading dashboard data:', error);
         alert(lang === 'en' ? 'Error loading dashboard data' : 'Greška pri učitavanju podataka za kontrolnu tablu');
@@ -36,6 +43,16 @@ const Dashboard: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => 
     };
     loadData();
   }, [user.id, lang]);
+
+  // Check if course is assigned to user
+  const isCourseAssigned = (courseId: string): boolean => {
+    return userAssignments.some(assignment => assignment.courseId === courseId);
+  };
+
+  // Get assignment info for a specific course
+  const getCourseAssignment = (courseId: string): UserCourseAssignment | undefined => {
+    return userAssignments.find(assignment => assignment.courseId === courseId);
+  };
 
   const userProgress = useMemo(() => 
     allProgress.filter(p => p.userId === user.id), 
@@ -79,7 +96,7 @@ const Dashboard: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => 
     return Math.round((p.completedLessonIds.length / course.lessons.length) * 100);
   };
 
-  // Statistics
+  // Statistics - add assigned courses count
   const stats = useMemo(() => {
     const completed = userProgress.filter(p => p.isCompleted).length;
     
@@ -105,8 +122,20 @@ const Dashboard: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => 
       return getCompletionPercentage(course) > 0;
     }).length;
 
-    return { completed, avgScore, active };
-  }, [userProgress, courses]);
+    // Count assigned courses
+    const assignedCourses = userAssignments.length;
+    
+    // Count required assigned courses
+    const requiredAssignedCourses = userAssignments.filter(a => a.isRequired).length;
+
+    return { 
+      completed, 
+      avgScore, 
+      active, 
+      assignedCourses,
+      requiredAssignedCourses 
+    };
+  }, [userProgress, courses, userAssignments]);
 
   if (isLoading) {
     return (
@@ -144,6 +173,132 @@ const Dashboard: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => 
           )}
         </div>
       </div>
+
+      {/* Highlighted Assigned Courses */}
+      {userAssignments.length > 0 && (
+        <div className="mb-8 md:mb-12">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-6 h-6 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-lg flex items-center justify-center">
+              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900">
+              {lang === 'en' ? 'Assigned Courses' : 'Dodeljeni kursevi'}
+            </h3>
+            <span className="px-2 py-1 bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-xs font-bold rounded-full">
+              {userAssignments.length}
+            </span>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {userAssignments.slice(0, 3).map((assignment) => {
+              const course = courses.find(c => c.id === assignment.courseId);
+              if (!course) return null;
+              
+              const progress = getCompletionPercentage(course);
+              const isRequired = assignment.isRequired;
+              const hasDueDate = assignment.dueDate && new Date(assignment.dueDate) > new Date();
+              const daysUntilDue = assignment.dueDate 
+                ? Math.ceil((new Date(assignment.dueDate).getTime() - new Date().getTime()) / (1000 * 3600 * 24))
+                : null;
+
+              return (
+                <div 
+                  key={assignment.id}
+                  onClick={() => navigate(`/app/course/${course.id}`)}
+                  className={`p-4 rounded-xl border transition-all hover:shadow-lg cursor-pointer ${
+                    isRequired
+                      ? 'bg-gradient-to-br from-indigo-50 to-purple-50 border-indigo-200'
+                      : 'bg-gradient-to-br from-blue-50 to-cyan-50 border-blue-200'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                          isRequired
+                            ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white'
+                            : 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white'
+                        }`}>
+                          {lang === 'en' ? 'ASSIGNED' : 'DODIJELJENO'}
+                        </span>
+                        {isRequired && (
+                          <span className="px-2 py-1 bg-red-100 text-red-700 text-xs font-bold rounded-full">
+                            {lang === 'en' ? 'REQUIRED' : 'OBAVEZNO'}
+                          </span>
+                        )}
+                        {hasDueDate && daysUntilDue !== null && daysUntilDue > 0 && (
+                          <span className="px-2 py-1 bg-amber-100 text-amber-700 text-xs font-bold rounded-full">
+                            {lang === 'en' ? `Due in ${daysUntilDue} days` : `Za ${daysUntilDue} dana`}
+                          </span>
+                        )}
+                      </div>
+                      <h4 className="font-semibold text-gray-900 text-sm mb-1 line-clamp-1">{course.title}</h4>
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                          <div 
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              progress === 100 
+                                ? 'bg-gradient-to-r from-green-500 to-emerald-500' 
+                                : 'bg-gradient-to-r from-indigo-500 to-purple-500'
+                            }`}
+                            style={{ width: `${progress}%` }}
+                          />
+                        </div>
+                        <span className="text-xs font-semibold text-indigo-700 whitespace-nowrap">{progress}%</span>
+                      </div>
+                      <p className="text-xs text-gray-600">
+                        {lang === 'en' 
+                          ? `Assigned by admin ${assignment.assignedAt ? new Date(assignment.assignedAt).toLocaleDateString() : ''}`
+                          : `Dodijeljeno od strane admina ${assignment.assignedAt ? new Date(assignment.assignedAt).toLocaleDateString() : ''}`}
+                      </p>
+                      {assignment.dueDate && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          📅 {lang === 'en' 
+                            ? `Due: ${new Date(assignment.dueDate).toLocaleDateString()}`
+                            : `Rok: ${new Date(assignment.dueDate).toLocaleDateString()}`}
+                        </p>
+                      )}
+                    </div>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/app/course/${course.id}`);
+                      }}
+                      className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all hover:scale-105 ${
+                        isRequired
+                          ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white'
+                          : 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white'
+                      }`}
+                    >
+                      {progress > 0 
+                        ? (lang === 'en' ? 'Continue' : 'Nastavi') 
+                        : (lang === 'en' ? 'Start Now' : 'Započni odmah')}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+            
+            {userAssignments.length > 3 && (
+              <div 
+                onClick={() => setSearchTerm('')}
+                className="p-4 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl border border-gray-200 hover:shadow-lg transition-all cursor-pointer flex items-center justify-center group"
+              >
+                <div className="text-center">
+                  <div className="w-10 h-10 bg-gradient-to-r from-indigo-300 to-purple-400 rounded-full flex items-center justify-center mx-auto mb-2 group-hover:scale-110 transition-transform">
+                    <span className="text-white font-bold text-lg">+{userAssignments.length - 3}</span>
+                  </div>
+                  <p className="text-sm font-medium text-gray-700">
+                    {lang === 'en' ? 'View all assigned courses' : 'Prikaži sve dodeljene kurseve'}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Expiry Warnings */}
       {expiryWarnings.length > 0 && user.role === UserRole.TRAINEE && (
@@ -205,7 +360,7 @@ const Dashboard: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => 
       )}
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8 md:mb-12">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 md:gap-6 mb-8 md:mb-12">
         <div className="bg-gradient-to-br from-white to-gray-50 p-5 md:p-6 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between mb-4">
             <div className="w-10 h-10 bg-gradient-to-br from-blue-100 to-cyan-100 rounded-lg flex items-center justify-center">
@@ -244,6 +399,20 @@ const Dashboard: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => 
 
         <div className="bg-gradient-to-br from-white to-gray-50 p-5 md:p-6 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between mb-4">
+            <div className="w-10 h-10 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-lg flex items-center justify-center">
+              <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+          </div>
+          <h3 className="text-2xl md:text-3xl font-bold text-indigo-600 mb-1">{stats.assignedCourses}</h3>
+          <p className="text-sm text-gray-600 font-medium">
+            {lang === 'en' ? 'Assigned Courses' : 'Dodijeljeni kursevi'}
+          </p>
+        </div>
+
+        <div className="bg-gradient-to-br from-white to-gray-50 p-5 md:p-6 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between mb-4">
             <div className="w-10 h-10 bg-gradient-to-br from-purple-100 to-violet-100 rounded-lg flex items-center justify-center">
               <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
@@ -269,29 +438,54 @@ const Dashboard: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => 
             </p>
           </div>
           
-          <div className="relative w-full md:w-72 lg:w-80">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </div>
-            <input 
-              type="text" 
-              placeholder={t.searchCourses || 'Search courses...'}
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-10 py-3 bg-white border border-gray-300 rounded-xl shadow-sm outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-gray-900 text-sm"
-            />
-            {searchTerm && (
-              <button 
-                onClick={() => setSearchTerm('')}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+            <div className="relative w-full md:w-72 lg:w-80">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
-              </button>
-            )}
+              </div>
+              <input 
+                type="text" 
+                placeholder={t.searchCourses || 'Search courses...'}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-10 py-3 bg-white border border-gray-300 rounded-xl shadow-sm outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-gray-900 text-sm"
+              />
+              {searchTerm && (
+                <button 
+                  onClick={() => setSearchTerm('')}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+            
+            {/* Filter za dodeljene kurseve */}
+            <button 
+              onClick={() => {
+                // Implement filter for assigned courses
+                const assignedCourses = filteredCourses.filter(c => isCourseAssigned(c.id));
+                if (assignedCourses.length > 0) {
+                  alert(lang === 'en' 
+                    ? `You have ${assignedCourses.length} assigned courses` 
+                    : `Imate ${assignedCourses.length} dodeljenih kurseva`);
+                } else {
+                  alert(lang === 'en' 
+                    ? 'No assigned courses found' 
+                    : 'Nema dodeljenih kurseva');
+                }
+              }}
+              className="px-4 py-3 bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 text-indigo-700 rounded-xl font-semibold text-sm hover:shadow-md transition-all whitespace-nowrap flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              {lang === 'en' ? 'Assigned Only' : 'Samo dodeljeni'}
+            </button>
           </div>
         </div>
 
@@ -301,12 +495,20 @@ const Dashboard: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => 
               const progress = getCompletionPercentage(course);
               const p = userProgress.find(up => up.courseId === course.id);
               const isExpired = p?.expiryDate && new Date(p.expiryDate) < new Date();
+              const isAssigned = isCourseAssigned(course.id);
+              const assignment = getCourseAssignment(course.id);
+              const isRequired = assignment?.isRequired;
+              const hasDueDate = assignment?.dueDate && new Date(assignment.dueDate) > new Date();
 
               return (
                 <div 
                   key={course.id}
                onClick={() => navigate(`/app/course/${course.id}`)}
-                  className="group bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer hover:-translate-y-1"
+                  className={`group bg-white rounded-2xl border overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer hover:-translate-y-1 ${
+                    isAssigned 
+                      ? 'border-indigo-300 ring-2 ring-indigo-100' 
+                      : 'border-gray-200'
+                  }`}
                 >
                   <div className="relative h-40 md:h-48 overflow-hidden">
                     <img 
@@ -329,7 +531,21 @@ const Dashboard: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => 
                       </span>
                     </div>
                     
-                    {isExpired && (
+                    {/* Assigned Badge */}
+                    {isAssigned && (
+                      <div className="absolute top-3 right-3 flex flex-col gap-1 items-end">
+                        <span className="px-3 py-1 bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-xs font-bold rounded-lg shadow-lg">
+                          {lang === 'en' ? 'ASSIGNED' : 'Dodijeljeno'}
+                        </span>
+                        {isRequired && (
+                          <span className="px-2 py-1 bg-red-600 text-white text-xs font-bold rounded-full">
+                            {lang === 'en' ? 'REQUIRED' : 'OBAVEZNO'}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    
+                    {isExpired && !isAssigned && (
                       <div className="absolute top-3 right-3 px-2 py-1 bg-gradient-to-r from-red-600 to-pink-600 text-white text-xs font-bold rounded-lg">
                         {lang === 'en' ? 'EXPIRED' : 'ISTEKLO'}
                       </div>
@@ -344,20 +560,47 @@ const Dashboard: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => 
                       {course.description}
                     </p>
                     
+                    {/* Assignment info */}
+                    {isAssigned && assignment && (
+                      <div className="mb-3 p-2 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border border-indigo-100">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            </svg>
+                            <span className="text-xs text-indigo-700 font-medium">
+                              {lang === 'en' ? 'Assigned by Admin' : 'Dodijeljeno od strane admina'}
+                            </span>
+                          </div>
+                          {assignment.dueDate && (
+                            <span className="text-xs text-gray-600">
+                              📅 {new Date(assignment.dueDate).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    
                     {/* Progress bar */}
                     <div className="mb-4">
                       <div className="flex justify-between items-center mb-2">
                         <span className="text-xs font-medium text-gray-500">
                           {lang === 'en' ? 'Progress' : 'Napredak'}
                         </span>
-                        <span className="text-xs font-semibold text-blue-600">{progress}%</span>
+                        <span className={`text-xs font-semibold ${
+                          isAssigned ? 'text-indigo-600' : 'text-blue-600'
+                        }`}>
+                          {progress}%
+                        </span>
                       </div>
                       <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
                         <div 
                           className={`h-full rounded-full transition-all duration-500 ${
                             progress === 100 
                               ? 'bg-gradient-to-r from-green-500 to-emerald-500' 
-                              : 'bg-gradient-to-r from-blue-500 to-cyan-500'
+                              : isAssigned
+                                ? 'bg-gradient-to-r from-indigo-500 to-purple-500'
+                                : 'bg-gradient-to-r from-blue-500 to-cyan-500'
                           }`}
                           style={{ width: `${progress}%` }}
                         />
@@ -366,8 +609,14 @@ const Dashboard: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => 
                     
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-100 to-cyan-100 flex items-center justify-center">
-                          <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                          isAssigned 
+                            ? 'bg-gradient-to-br from-indigo-100 to-purple-100' 
+                            : 'bg-gradient-to-br from-blue-100 to-cyan-100'
+                        }`}>
+                          <svg className={`w-4 h-4 ${
+                            isAssigned ? 'text-indigo-600' : 'text-blue-600'
+                          }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                           </svg>
@@ -375,8 +624,17 @@ const Dashboard: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => 
                         <span className="text-sm text-gray-600">
                           {course.lessons.length} {lang === 'en' ? 'lessons' : 'lekcija'}
                         </span>
+                        {hasDueDate && (
+                          <span className="text-xs text-indigo-600 font-semibold px-2 py-1 bg-indigo-50 rounded">
+                            📅
+                          </span>
+                        )}
                       </div>
-                      <button className="px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-cyan-600 rounded-lg hover:shadow-lg transition-all group-hover:scale-105">
+                      <button className={`px-4 py-2 text-sm font-semibold text-white rounded-lg hover:shadow-lg transition-all group-hover:scale-105 ${
+                        isAssigned
+                          ? 'bg-gradient-to-r from-indigo-600 to-purple-600'
+                          : 'bg-gradient-to-r from-blue-600 to-cyan-600'
+                      }`}>
                         {progress > 0 
                           ? (lang === 'en' ? 'Continue' : 'Nastavi') 
                           : (lang === 'en' ? 'Start' : 'Započni')}
