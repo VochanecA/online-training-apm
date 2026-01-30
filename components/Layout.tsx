@@ -18,18 +18,18 @@ const Layout: React.FC<LayoutProps> = ({ children, user, lang, setLang }) => {
   const t = translations[lang];
 
   const menuItems = [
-    { label: t.dashboard, icon: 'dashboard', path: '/' },
-    { label: t.myCourses, icon: 'courses', path: '/courses' },
-    { label: t.profile, icon: 'profile', path: '/profile' },
+    { label: t.dashboard, icon: 'dashboard', path: '/app' },
+    { label: t.myCourses, icon: 'courses', path: '/app/courses' },
+    { label: t.profile, icon: 'profile', path: '/app/profile' },
   ];
 
   if (user.role === UserRole.ADMIN || user.role === UserRole.INSTRUCTOR) {
-    menuItems.push({ label: t.courseManagement, icon: 'management', path: '/admin/courses' });
-    menuItems.push({ label: t.reports, icon: 'reports', path: '/admin/reports' });
+    menuItems.push({ label: t.courseManagement, icon: 'management', path: '/app/admin/courses' });
+    menuItems.push({ label: t.reports, icon: 'reports', path: '/app/admin/reports' });
   }
 
   if (user.role === UserRole.ADMIN) {
-    menuItems.push({ label: t.userManagement, icon: 'users', path: '/admin/users' });
+    menuItems.push({ label: t.userManagement, icon: 'users', path: '/app/admin/users' });
   }
 
   const handleLogout = async () => {
@@ -85,7 +85,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, lang, setLang }) => {
       <div className="lg:hidden flex items-center justify-between p-4 bg-white border-b border-gray-200">
         <div className="flex items-center gap-3">
           <div 
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/app')}
             className="flex items-center gap-2 cursor-pointer"
           >
             <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-cyan-600 rounded-lg flex items-center justify-center">
@@ -161,8 +161,8 @@ const Layout: React.FC<LayoutProps> = ({ children, user, lang, setLang }) => {
             
             <nav className="p-4 space-y-1">
               {menuItems.map((item) => {
-                const isActive = item.path === '/' 
-                  ? location.pathname === '/' 
+                const isActive = item.path === '/app' 
+                  ? location.pathname === '/app' 
                   : location.pathname.startsWith(item.path);
                   
                 return (
@@ -200,7 +200,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, lang, setLang }) => {
       <aside className="hidden lg:flex lg:w-64 xl:w-72 flex-col bg-gradient-to-b from-white to-gray-50 border-r border-gray-200">
         <div className="p-6 border-b border-gray-200">
           <div 
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/app')}
             className="flex items-center gap-3 cursor-pointer group"
           >
             <div className="relative">
@@ -239,8 +239,8 @@ const Layout: React.FC<LayoutProps> = ({ children, user, lang, setLang }) => {
 
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           {menuItems.map((item) => {
-            const isActive = item.path === '/' 
-              ? location.pathname === '/' 
+            const isActive = item.path === '/app' 
+              ? location.pathname === '/app' 
               : location.pathname.startsWith(item.path);
               
             return (
@@ -262,7 +262,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, lang, setLang }) => {
 
         <div className="p-4 border-t border-gray-200">
           <div 
-            onClick={() => navigate('/profile')}
+            onClick={() => navigate('/app/profile')}
             className="flex items-center gap-3 p-3 bg-gray-50 hover:bg-gray-100 rounded-xl cursor-pointer transition-colors mb-3"
           >
             <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full flex items-center justify-center font-bold text-white shadow-sm">
