@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { db } from '../db';
@@ -16,6 +15,7 @@ const ExamView: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => {
   const reviewAttemptId = queryParams.get('review');
 
   const [course, setCourse] = useState<Course | null>(null);
+  const [progress, setProgress] = useState<Progress | null>(null);
   const [randomizedQuestions, setRandomizedQuestions] = useState<Question[]>([]);
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -24,60 +24,75 @@ const ExamView: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => {
   const [startTime] = useState(Date.now());
   const [showReview, setShowReview] = useState(false);
   const [historicalAttempt, setHistoricalAttempt] = useState<ExamAttempt | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (courseId) {
-      const c = db.getCourses().find(x => x.id === courseId);
-      if (c && c.exam) {
-        setCourse(c);
+    const loadCourseData = async () => {
+      try {
+        setLoading(true);
+        if (courseId) {
+          const c = await db.getCourse(courseId);
+          if (c && c.exam) {
+            setCourse(c);
+            
+            // Load progress
+            const progressData = await db.getProgress(user.id, c.id);
+            setProgress(progressData);
 
-        if (reviewAttemptId) {
-          // Historical Review Mode
-          const progress = db.getUserProgress(user.id, c.id);
-          const attempt = progress.attempts.find(a => a.id === reviewAttemptId);
-          if (attempt && attempt.questionsSnapshot) {
-            setHistoricalAttempt(attempt);
-            setRandomizedQuestions(attempt.questionsSnapshot);
-            setAnswers(attempt.answers);
-            setScore(attempt.score);
-            setIsSubmitted(true);
-            setShowReview(true);
-          } else {
-            // Fallback or error if snapshot missing
-            navigate(`/course/${c.id}`);
-          }
-        } else {
-          // Live Exam Taking Mode
-          setTimeLeft(c.exam.timeLimitMinutes * 60);
+            if (reviewAttemptId) {
+              // Historical Review Mode
+              const attempt = progressData.attempts.find(a => a.id === reviewAttemptId);
+              if (attempt && attempt.questionsSnapshot) {
+                setHistoricalAttempt(attempt);
+                setRandomizedQuestions(attempt.questionsSnapshot);
+                setAnswers(attempt.answers);
+                setScore(attempt.score);
+                setIsSubmitted(true);
+                setShowReview(true);
+              } else {
+                // Fallback or error if snapshot missing
+                navigate(`/app/course/${c.id}`);
+              }
+            } else {
+              // Live Exam Taking Mode
+              setTimeLeft(c.exam.timeLimitMinutes * 60);
 
-          let qs = [...c.exam.questions];
-          if (c.exam.randomizeQuestions) {
-            qs.sort(() => Math.random() - 0.5);
-          }
+              let qs = [...c.exam.questions];
+              if (c.exam.randomizeQuestions) {
+                qs.sort(() => Math.random() - 0.5);
+              }
 
-          if (c.exam.questionBankDrawCount && c.exam.questionBankDrawCount > 0) {
-            qs = qs.slice(0, c.exam.questionBankDrawCount);
-          }
+              if (c.exam.questionBankDrawCount && c.exam.questionBankDrawCount > 0) {
+                qs = qs.slice(0, c.exam.questionBankDrawCount);
+              }
 
-          if (c.exam.randomizeAnswers) {
-            qs = qs.map(q => {
-              const correctText = q.options[q.correctOptionIndex];
-              const shuffledOptions = [...q.options].sort(() => Math.random() - 0.5);
-              return {
-                ...q,
-                options: shuffledOptions,
-                correctOptionIndex: shuffledOptions.indexOf(correctText)
-              };
-            });
+              if (c.exam.randomizeAnswers) {
+                qs = qs.map(q => {
+                  const correctText = q.options[q.correctOptionIndex];
+                  const shuffledOptions = [...q.options].sort(() => Math.random() - 0.5);
+                  return {
+                    ...q,
+                    options: shuffledOptions,
+                    correctOptionIndex: shuffledOptions.indexOf(correctText)
+                  };
+                });
+              }
+              setRandomizedQuestions(qs);
+            }
           }
-          setRandomizedQuestions(qs);
         }
+      } catch (error) {
+        console.error('Error loading exam data:', error);
+      } finally {
+        setLoading(false);
       }
-    }
+    };
+
+    loadCourseData();
   }, [courseId, reviewAttemptId, user.id, navigate]);
 
-  const handleSubmit = useCallback(() => {
-    if (isSubmitted || !course || !course.exam) return;
+  const handleSubmit = useCallback(async () => {
+    if (isSubmitted || !course || !course.exam || !progress) return;
 
     const exam = course.exam;
     let correctCount = 0;
@@ -101,7 +116,6 @@ const ExamView: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => {
       questionsSnapshot: [...randomizedQuestions] // Crucial for historical review
     };
 
-    const progress = db.getUserProgress(user.id, course.id);
     const updatedAttempts = [...progress.attempts, newAttempt];
     
     const isNowCompleted = passed && (!course.requiresPracticalCheck || progress.practicalCheckCompleted);
@@ -116,15 +130,16 @@ const ExamView: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => {
       expiryDate: isNowCompleted ? new Date(new Date().setFullYear(new Date().getFullYear() + (course.validityYears || 2))).toISOString() : progress.expiryDate
     };
 
-    db.updateProgress(updatedProgress);
-    db.logAction(user.id, 'EXAM_SUBMIT', `Exam: ${course.title}, Score: ${finalScore}%, Passed: ${passed}, Duration: ${timeSpent}s`);
+    await db.updateProgress(updatedProgress);
+    await db.logAction(user.id, 'EXAM_SUBMIT', `Exam: ${course.title}, Score: ${finalScore}%, Passed: ${passed}, Duration: ${timeSpent}s`);
     
+    setProgress(updatedProgress);
     setScore(finalScore);
     setIsSubmitted(true);
-  }, [isSubmitted, course, randomizedQuestions, answers, user.id, startTime]);
+  }, [isSubmitted, course, randomizedQuestions, answers, progress, user.id, startTime]);
 
   useEffect(() => {
-    if (timeLeft > 0 && !isSubmitted) {
+    if (timeLeft > 0 && !isSubmitted && course?.exam) {
       const timer = setInterval(() => setTimeLeft(prev => {
         if (prev <= 1) {
           handleSubmit();
@@ -134,93 +149,152 @@ const ExamView: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => {
       }), 1000);
       return () => clearInterval(timer);
     }
-  }, [timeLeft, isSubmitted, handleSubmit]);
+  }, [timeLeft, isSubmitted, handleSubmit, course]);
 
-  if (!course || !course.exam) return <div className="p-20 text-center font-black text-slate-400">Loading exam environment...</div>;
+  if (loading) {
+    return (
+      <div className="min-h-[80vh] flex items-center justify-center">
+        <div className="relative">
+          <div className="w-16 h-16 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin"></div>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-8 h-8 bg-blue-600/20 rounded-full animate-ping"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!course || !course.exam) return (
+    <div className="max-w-7xl mx-auto px-4 py-8 animate-fade-in">
+      <div className="text-center py-12">
+        <div className="w-16 h-16 bg-gradient-to-br from-gray-100 to-gray-200 rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+        </div>
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">
+          Exam not available
+        </h3>
+        <p className="text-gray-600 mb-4">This course doesn't have an exam configured.</p>
+        <button
+          onClick={() => navigate(`/app/course/${courseId}`)}
+          className="px-6 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-xl font-medium hover:shadow-lg transition-all"
+        >
+          Back to Course
+        </button>
+      </div>
+    </div>
+  );
 
   if (isSubmitted) {
     const passed = score >= course.exam.passingScore;
     return (
-      <div className="max-w-3xl mx-auto py-12 animate-in fade-in duration-500">
-        <div className={`p-12 rounded-[3.5rem] shadow-2xl ${passed ? 'bg-green-50 border-2 border-green-100' : 'bg-red-50 border-2 border-red-100'} text-center mb-10`}>
-          <div className={`w-28 h-28 rounded-full mx-auto flex items-center justify-center mb-8 text-5xl shadow-2xl ${passed ? 'bg-green-600 text-white shadow-green-600/30' : 'bg-red-600 text-white shadow-red-600/30'}`}>
-            {passed ? '✓' : '✕'}
+      <div className="max-w-7xl mx-auto px-4 py-8 animate-fade-in">
+        <div className={`p-8 rounded-2xl mb-6 ${passed ? 'bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200' : 'bg-gradient-to-r from-red-50 to-pink-50 border border-red-200'}`}>
+          <div className="flex items-center gap-4 mb-4">
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${passed ? 'bg-green-600' : 'bg-red-600'}`}>
+              {passed ? '✓' : '✗'}
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">
+                {historicalAttempt ? 'Attempt Result' : (passed ? t.congratulations || 'Congratulations!' : t.almostThere || 'Almost There!')}
+              </h2>
+              <p className="text-gray-600">
+                {t.result || 'Result'}: <span className={`font-bold ${passed ? 'text-green-600' : 'text-red-600'}`}>{score}%</span>
+              </p>
+            </div>
           </div>
-          <h1 className="text-5xl font-black text-slate-900 mb-4 tracking-tighter">
-            {historicalAttempt ? `Attempt Result` : (passed ? t.congratulations : t.almostThere)}
-          </h1>
-          <p className="text-slate-600 mb-12 text-2xl font-medium">
-            {t.result}: <span className={`font-black ${passed ? 'text-green-600' : 'text-red-600'}`}>{score}%</span>
-          </p>
           
-          <div className="flex flex-col gap-4 max-w-sm mx-auto">
+          <div className="space-y-4 max-w-md mx-auto">
             {!historicalAttempt && (
               passed ? (
-                <button onClick={() => navigate(`/course/${course.id}`)} className="w-full py-5 bg-slate-900 text-white rounded-[2rem] font-black shadow-xl hover:bg-black transition-all hover:scale-105 active:scale-95">{t.returnToCourse}</button>
+                <button 
+                  onClick={() => navigate(`/app/course/${course.id}`)} 
+                  className="w-full py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-xl font-medium hover:shadow-lg transition-all"
+                >
+                  {t.returnToCourse || 'Return to Course'}
+                </button>
               ) : (
-                <button onClick={() => window.location.reload()} className="w-full py-5 bg-red-600 text-white rounded-[2rem] font-black shadow-xl hover:bg-red-700 transition-all hover:scale-105 active:scale-95">{t.retakeExam}</button>
+                <button 
+                  onClick={() => window.location.reload()} 
+                  className="w-full py-3 bg-gradient-to-r from-red-600 to-pink-600 text-white rounded-xl font-medium hover:shadow-lg transition-all"
+                >
+                  {t.retakeExam || 'Retake Exam'}
+                </button>
               )
             )}
             {historicalAttempt && (
-              <button onClick={() => navigate(`/course/${course.id}`)} className="w-full py-5 bg-slate-900 text-white rounded-[2rem] font-black shadow-xl hover:bg-black transition-all active:scale-95">{t.returnToCourse}</button>
+              <button 
+                onClick={() => navigate(`/app/course/${course.id}`)} 
+                className="w-full py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-xl font-medium hover:shadow-lg transition-all"
+              >
+                {t.returnToCourse || 'Return to Course'}
+              </button>
             )}
+            
             <button 
               onClick={() => setShowReview(!showReview)} 
-              className="w-full py-5 bg-white border-2 border-slate-200 text-slate-700 rounded-[2rem] font-black shadow-sm hover:bg-slate-50 transition-all active:scale-95"
+              className="w-full py-3 bg-white border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition-all"
             >
-              {showReview ? t.hideReview : t.reviewAnswers}
+              {showReview ? (t.hideReview || 'Hide Review') : (t.reviewAnswers || 'Review Answers')}
             </button>
-            <button onClick={() => navigate('/dashboard')} className="mt-4 text-slate-400 font-black hover:text-slate-900 uppercase tracking-widest text-xs transition-colors underline underline-offset-8">{t.backToDashboard}</button>
+            
+            <button 
+              onClick={() => navigate('/app')} 
+              className="w-full py-2 text-gray-600 hover:text-gray-900 font-medium"
+            >
+              {t.backToDashboard || 'Back to Dashboard'}
+            </button>
           </div>
         </div>
 
         {showReview && (
-          <div className="space-y-6 animate-in slide-in-from-bottom-8 duration-500 pb-20">
-            <h2 className="text-2xl font-black text-slate-900 mb-8 px-6 uppercase tracking-tight">{t.reviewAnswers}</h2>
+          <div className="space-y-6 mt-8">
+            <h3 className="text-lg font-bold text-gray-900">{t.reviewAnswers || 'Review Answers'}</h3>
             {randomizedQuestions.map((q, idx) => {
               const userAns = answers[q.id];
               const isCorrect = userAns === q.correctOptionIndex;
               return (
-                <div key={q.id} className={`p-10 rounded-[2.5rem] bg-white border-2 transition-all ${isCorrect ? 'border-green-100 shadow-green-500/5' : 'border-red-100 shadow-red-500/5'}`}>
-                  <div className="flex items-start gap-6 mb-8">
-                    <span className={`w-12 h-12 rounded-2xl flex items-center justify-center text-sm font-black shrink-0 shadow-sm ${isCorrect ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
+                <div key={q.id} className={`p-6 rounded-xl border ${isCorrect ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
+                  <div className="flex items-start gap-4 mb-4">
+                    <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold ${isCorrect ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
                       {idx + 1}
                     </span>
                     <div className="flex-1">
-                      <h3 className="text-xl font-black text-slate-900 leading-tight mb-2">{q.text}</h3>
-                      <p className={`text-[10px] font-black uppercase tracking-widest ${isCorrect ? 'text-green-600' : 'text-red-600'}`}>
-                        {isCorrect ? t.correct : t.incorrect}
+                      <h4 className="font-semibold text-gray-900 mb-1">{q.text}</h4>
+                      <p className={`text-xs font-medium ${isCorrect ? 'text-green-600' : 'text-red-600'}`}>
+                        {isCorrect ? t.correct || 'Correct' : t.incorrect || 'Incorrect'}
                       </p>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-4">
+                  <div className="space-y-3">
                     {q.options.map((opt, optIdx) => {
                       const isUserSelection = userAns === optIdx;
                       const isCorrectOption = q.correctOptionIndex === optIdx;
                       
-                      let appearance = "bg-slate-50 border-slate-100 text-slate-500";
-                      if (isCorrectOption) appearance = "bg-green-50 border-green-200 text-green-700 ring-2 ring-green-600/10";
-                      else if (isUserSelection && !isCorrect) appearance = "bg-red-50 border-red-200 text-red-700 ring-2 ring-red-600/10";
+                      let appearance = "bg-white border-gray-200 text-gray-700";
+                      if (isCorrectOption) appearance = "bg-green-50 border-green-200 text-green-700";
+                      else if (isUserSelection && !isCorrect) appearance = "bg-red-50 border-red-200 text-red-700";
 
                       return (
-                        <div key={optIdx} className={`p-6 rounded-2xl border-2 font-bold transition-all flex items-center gap-4 ${appearance}`}>
-                          <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-[10px] font-black border-2 transition-colors ${
-                            isCorrectOption ? 'bg-green-600 border-green-600 text-white' : 
-                            (isUserSelection && !isCorrect) ? 'bg-red-600 border-red-600 text-white' :
-                            'bg-white border-slate-200 text-slate-400'
+                        <div key={optIdx} className={`p-4 rounded-lg border flex items-center gap-3 ${appearance}`}>
+                          <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                            isCorrectOption ? 'bg-green-600 text-white' : 
+                            (isUserSelection && !isCorrect) ? 'bg-red-600 text-white' :
+                            'bg-gray-100 text-gray-500'
                           }`}>
                             {String.fromCharCode(65 + optIdx)}
                           </span>
                           <span className="flex-1">{opt}</span>
                           {isUserSelection && (
-                            <span className="text-[9px] font-black uppercase tracking-widest px-2 py-1 bg-white/50 rounded-lg shadow-sm border border-black/5">
-                              {t.yourSelection}
+                            <span className="text-xs font-medium bg-white/70 px-2 py-1 rounded">
+                              {t.yourSelection || 'Your selection'}
                             </span>
                           )}
                           {isCorrectOption && !isUserSelection && (
-                            <span className="text-[9px] font-black uppercase tracking-widest px-2 py-1 bg-green-600 text-white rounded-lg shadow-lg">
-                              {t.correctAnswer}
+                            <span className="text-xs font-medium bg-green-600 text-white px-2 py-1 rounded">
+                              {t.correctAnswer || 'Correct answer'}
                             </span>
                           )}
                         </div>
@@ -243,77 +317,97 @@ const ExamView: React.FC<{ user: User, lang: Language }> = ({ user, lang }) => {
   };
 
   return (
-    <div className="max-w-3xl mx-auto pb-24 animate-in fade-in duration-700">
-      <div className="sticky top-6 z-50 flex justify-center mb-12">
-        <div className={`px-10 py-4 rounded-full font-black text-2xl shadow-2xl border-2 backdrop-blur-3xl transition-all duration-300 ${timeLeft < 60 ? 'bg-red-600 text-white border-red-400 animate-pulse' : 'bg-slate-900/90 text-white border-slate-700'}`}>
-          <div className="flex items-center gap-3">
-             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-             {formatTime(timeLeft)}
+    <div className="max-w-7xl mx-auto px-4 py-8 animate-fade-in">
+      {/* Header */}
+      <div className="mb-8">
+        <button 
+          onClick={() => navigate(`/app/course/${course.id}`)} 
+          className="flex items-center gap-2 text-gray-600 hover:text-gray-900 font-medium transition-colors mb-4"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+          {t.backToCourse || 'Back to Course'}
+        </button>
+        
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">{t.finalExam || 'Final Exam'}</h1>
+            <p className="text-gray-600">{course.title}</p>
           </div>
+          
+          <div className={`px-4 py-2 rounded-lg font-semibold ${timeLeft < 60 ? 'bg-red-600 text-white' : 'bg-blue-600 text-white'}`}>
+            <div className="flex items-center gap-2">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              {formatTime(timeLeft)}
+            </div>
+          </div>
+        </div>
+        
+        <div className="bg-gradient-to-r from-blue-50 to-cyan-50 p-4 rounded-xl border border-blue-200">
+          <p className="text-sm text-gray-700">
+            {t.passingScore || 'Passing Score'}: <span className="font-bold text-blue-600">{course.exam.passingScore}%</span>
+          </p>
         </div>
       </div>
 
-      <header className="mb-16 text-center">
-        <div className="inline-block px-4 py-1.5 bg-blue-100 text-blue-600 rounded-full text-[10px] font-black uppercase tracking-widest mb-4 border border-blue-200 shadow-sm">
-          {t.finalExam}
-        </div>
-        <h1 className="text-5xl font-black text-slate-900 tracking-tighter leading-tight">{course.title}</h1>
-        <p className="text-slate-400 mt-4 font-black uppercase tracking-[0.3em] text-xs">{t.passingScore}: <span className="text-blue-600">{course.exam.passingScore}%</span></p>
-      </header>
-
-      <div className="space-y-12">
+      {/* Questions */}
+      <div className="space-y-6">
         {randomizedQuestions.map((q, idx) => (
-          <div key={q.id} className="bg-white p-12 rounded-[3rem] shadow-sm border border-slate-100 hover:border-blue-200 transition-all duration-500 hover:shadow-2xl hover:shadow-slate-200/50">
-            <h3 className="text-2xl font-black text-slate-900 mb-10 flex items-start leading-tight">
-              <span className="w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center text-sm mr-6 shrink-0 font-black shadow-xl shadow-slate-900/20">
+          <div key={q.id} className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg transition-shadow">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-start">
+              <span className="w-8 h-8 bg-blue-600 text-white rounded-lg flex items-center justify-center text-sm mr-3">
                 {idx + 1}
               </span>
-              <span className="pt-1">{q.text}</span>
+              <span>{q.text}</span>
             </h3>
-            <div className="grid grid-cols-1 gap-4">
+            
+            <div className="space-y-3">
               {q.options.map((opt, optIdx) => (
                 <button
                   key={optIdx}
                   onClick={() => setAnswers({ ...answers, [q.id]: optIdx })}
-                  className={`p-7 rounded-[1.8rem] border-2 text-left transition-all flex items-center group relative overflow-hidden ${
-                    answers[q.id] === optIdx 
-                      ? 'bg-blue-600 border-blue-600 text-white shadow-xl shadow-blue-600/20 scale-[1.02]' 
-                      : 'bg-slate-50 border-slate-100 text-slate-700 hover:border-blue-200 hover:bg-white'
+                  className={`w-full p-4 rounded-lg border text-left transition-all ${
+                    answers[q.id] === optIdx
+                      ? 'bg-blue-50 border-blue-300 text-blue-700'
+                      : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100'
                   }`}
                 >
-                  <span className={`w-10 h-10 rounded-xl border-2 mr-5 flex items-center justify-center text-xs font-black transition-all duration-300 ${
-                    answers[q.id] === optIdx ? 'bg-white border-white text-blue-600 rotate-[360deg]' : 'bg-white border-slate-200 text-slate-400 group-hover:border-blue-300'
-                  }`}>
-                    {String.fromCharCode(65 + optIdx)}
-                  </span>
-                  <span className="font-bold text-lg">{opt}</span>
-                  {answers[q.id] === optIdx && (
-                    <div className="absolute right-6 opacity-30">
-                       <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
-                    </div>
-                  )}
+                  <div className="flex items-center">
+                    <span className={`w-6 h-6 rounded-full border flex items-center justify-center text-xs mr-3 ${
+                      answers[q.id] === optIdx
+                        ? 'bg-blue-600 border-blue-600 text-white'
+                        : 'bg-white border-gray-300 text-gray-500'
+                    }`}>
+                      {String.fromCharCode(65 + optIdx)}
+                    </span>
+                    <span>{opt}</span>
+                  </div>
                 </button>
               ))}
             </div>
           </div>
         ))}
+      </div>
 
-        <div className="pt-16 flex flex-col items-center">
-          <button 
-            disabled={Object.keys(answers).length < randomizedQuestions.length}
-            onClick={handleSubmit}
-            className={`px-24 py-7 rounded-[2.5rem] font-black shadow-2xl transition-all text-2xl h-24 min-w-[320px] ${
-              Object.keys(answers).length >= randomizedQuestions.length
-                ? 'bg-slate-900 text-white hover:bg-black hover:scale-105 active:scale-95 shadow-slate-900/30' 
-                : 'bg-slate-200 text-slate-400 cursor-not-allowed opacity-50 shadow-none'
-            }`}
-          >
-            {t.submitExam}
-          </button>
-          <p className="mt-6 text-slate-400 text-xs font-black uppercase tracking-widest">
-            {Object.keys(answers).length} / {randomizedQuestions.length} questions answered
-          </p>
-        </div>
+      {/* Submit Button */}
+      <div className="mt-8 pt-8 border-t border-gray-200">
+        <button
+          onClick={handleSubmit}
+          disabled={Object.keys(answers).length < randomizedQuestions.length}
+          className={`w-full py-4 rounded-xl font-semibold text-lg ${
+            Object.keys(answers).length >= randomizedQuestions.length
+              ? 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white hover:shadow-lg transition-all'
+              : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+          }`}
+        >
+          {t.submitExam || 'Submit Exam'}
+        </button>
+        <p className="text-center text-gray-500 text-sm mt-2">
+          {Object.keys(answers).length} / {randomizedQuestions.length} {t.questionsAnswered || 'questions answered'}
+        </p>
       </div>
     </div>
   );

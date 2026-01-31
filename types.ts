@@ -48,8 +48,8 @@ export interface Lesson {
   description: string;
   order: number;
   materials: Material[];
-  minLearningTimeMinutes: number; // Prevent skip-through
-  // Timestamp polja za Supabase
+  minLearningTimeMinutes: number;
+  exam?: Exam; // ✅ DODAJTE OVO - test za lekciju
   createdAt?: string;
   updatedAt?: string;
 }
