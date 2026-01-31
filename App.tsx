@@ -69,9 +69,16 @@ const App: React.FC = () => {
     });
   };
 
-  const handleLoginSuccess = () => {
-    // This will trigger the auth state change and update user
-  };
+const handleLoginSuccess = () => {
+  console.log('Login success called');
+  // Ovdje možete dodati osvježavanje sesije
+  supabase.auth.getSession().then(({ data: { session } }) => {
+    if (session?.user) {
+      console.log('Session found after login', session.user);
+      updateUserFromSession(session.user);
+    }
+  });
+};
 
   if (loading) return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white flex items-center justify-center">

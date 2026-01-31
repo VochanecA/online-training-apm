@@ -59,6 +59,7 @@ const LoginModal: React.FC<LoginModalProps> = ({
         setTimeout(() => {
           setIsRegister(false);
           setFormSubmitted(false);
+          onClose(); // Zatvori modal nakon registracije
         }, 3000);
       } else {
         const { error } = await supabase.auth.signInWithPassword({
@@ -66,8 +67,10 @@ const LoginModal: React.FC<LoginModalProps> = ({
           password,
         });
         if (error) throw error;
+        
+        // Sada kada je login uspješan, pozovi onLoginSuccess
         onLoginSuccess();
-        onClose();
+        onClose(); // Zatvori modal
       }
     } catch (err: any) {
       setError(err.message);
@@ -109,7 +112,7 @@ const LoginModal: React.FC<LoginModalProps> = ({
               </h2>
               <p className="text-gray-500 text-xs sm:text-sm mt-1">
                 {isRegister 
-                  ? (lang === 'en' ? 'Join the aviation training platform' : 'Pridružite se platformi za avijacijsku obuku')
+                  ? (lang === 'en' ? 'Join the aviation training platform' : 'Pridružite se platformi za obuku')
                   : (lang === 'en' ? 'Sign in to your account' : 'Prijavite se na svoj račun')
                 }
               </p>
