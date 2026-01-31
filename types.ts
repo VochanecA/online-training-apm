@@ -41,6 +41,7 @@ export interface Material {
   updatedAt?: string;
 }
 
+
 export interface Lesson {
   id: string;
   courseId: string;

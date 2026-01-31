@@ -1553,6 +1553,7 @@ assignCourseToUser: async (userId: string, courseId: string, isRequired: boolean
       return [];
     }
   },
+  
 
   getUsersAssignedToCourse: async (courseId: string): Promise<User[]> => {
     try {

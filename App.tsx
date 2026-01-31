@@ -18,8 +18,12 @@ import Profile from './pages/Profile';
 import Login from './pages/Login';
 import Reports from './pages/Reports';
 import PublicCourses from './pages/PublicCourses';
+import UserAnalytics from './pages/UserAnalytics';
 
 import LessonExamView from './pages/LessonExamView';
+
+
+
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -128,6 +132,11 @@ const handleLoginSuccess = () => {
                 <Route path="/admin/course/new" element={<CourseEditor user={user} lang={lang} />} />
                 <Route path="/admin/course/edit/:id" element={<CourseEditor user={user} lang={lang} />} />
                 <Route path="/lesson-exam/:courseId/:lessonId" element={<LessonExamView user={user} lang={lang} />} />
+
+
+     
+
+<Route path="/admin/analytics" element={<UserAnalytics />} />
                 <Route path="*" element={<Navigate to="/app" replace />} />
               </Routes>
             </Layout>

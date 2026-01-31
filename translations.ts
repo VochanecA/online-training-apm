@@ -158,7 +158,7 @@ export const translations = {
     publicCatalog: 'Public Course Catalog',
     browseCourses: 'Explore our training programs available for airport personnel.',
     
-
+    analytics: 'Analytics',
     assignCourse: 'Assign Course',
 assignedCourses: 'Assigned Courses',
 selectCourse: 'Select Course',
@@ -604,6 +604,8 @@ assignCourseToUser: 'Dodijeli kurs korisniku',
     courseHistoryReport: 'Izveštaj o istoriji kurseva',
     generatedBy: 'Generisano od strane CloudTraining Aviation Platform',
     allRightsReserved: 'Sva prava zadržana',
+    analytics: 'Analitika',
+    
     
     // STATUS BADGE PREVODI
     statusNotStarted: 'Nije Započeto',
