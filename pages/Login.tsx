@@ -193,7 +193,7 @@ const handleLoginSuccess = () => {
             <p className="text-lg sm:text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed mb-8">
               {lang === 'en' 
                 ? 'Streamline airport personnel training, automate compliance tracking, and ensure regulatory readiness with our enterprise-grade aviation training solution.'
-                : 'Optimizirajte obuku aerodromskog osoblja, automatizirajte praćenje usklađenosti i osigurajte regulatornu spremnost s našim poslovnim rješenjem za obuku.'}
+                : 'Optimizujte obuku aerodromskog osoblja sa našim poslovnim rješenjem za obuku.'}
             </p>
 
             <div className="flex flex-wrap justify-center gap-4">
