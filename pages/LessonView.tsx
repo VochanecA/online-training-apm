@@ -5,6 +5,7 @@ import { Course, Lesson, Progress, User, Material } from '../types';
 import { Language, translations } from '../translations';
 import PDFViewer from '../components/PDFViewer';
 
+
 // ============================================
 // VIDEO VIEWER COMPONENT
 // ============================================
