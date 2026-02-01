@@ -21,18 +21,15 @@ const Layout: React.FC<LayoutProps> = ({ children, user, lang, setLang }) => {
     { label: t.dashboard, icon: 'dashboard', path: '/app' },
     { label: t.myCourses, icon: 'courses', path: '/app/courses' },
     { label: t.profile, icon: 'profile', path: '/app/profile' },
-    
-    
   ];
 
   if (user.role === UserRole.ADMIN || user.role === UserRole.INSTRUCTOR) {
     menuItems.push({ label: t.courseManagement, icon: 'management', path: '/app/admin/courses' });
-        menuItems.push({ label: t.courseManagement, icon: 'management', path: '/app/admin/courses' });
     menuItems.push({ label: t.reports, icon: 'reports', path: '/app/admin/reports' });
+    // DODATO: Certificate Management
+    menuItems.push({ label: 'Certificate Management', icon: 'certificate', path: '/app/admin/certificates' });
     // DODATO: Analitika za admin i instruktore
-   // U Layout.tsx, promenite putanju za analitiku
-// U Layout.tsx, promenite putanju za analitiku
-menuItems.push({ label: 'Analitika', icon: 'analytics', path: '/app/admin/analytics' });
+    menuItems.push({ label: 'Analitika', icon: 'analytics', path: '/app/admin/analytics' });
   }
 
   if (user.role === UserRole.ADMIN) {
@@ -72,7 +69,11 @@ menuItems.push({ label: 'Analitika', icon: 'analytics', path: '/app/admin/analyt
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
         </svg>
       );
-      // DODATO: Ikona za analitiku
+      case 'certificate': return (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+        </svg>
+      );
       case 'analytics': return (
         <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
@@ -92,7 +93,6 @@ menuItems.push({ label: 'Analitika', icon: 'analytics', path: '/app/admin/analyt
     }
   };
 
-  // Ostatak komponente ostaje nepromenjen...
   return (
     <div className="flex flex-col lg:flex-row min-h-screen bg-gradient-to-br from-gray-50 to-white">
       {/* Mobile Header */}
@@ -221,7 +221,7 @@ menuItems.push({ label: 'Analitika', icon: 'analytics', path: '/app/admin/analyt
               <div className="absolute inset-0 bg-gradient-to-br from-blue-600 to-cyan-600 rounded-xl blur opacity-20 group-hover:opacity-30 transition-opacity"></div>
               <div className="relative w-10 h-10 bg-gradient-to-br from-blue-600 to-cyan-600 rounded-lg flex items-center justify-center">
                 <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4 0 003 15z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
                 </svg>
               </div>
             </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../db';
-import { User, UserRole, Course, UserCourseAssignment } from '../types'; // DODAJTE UserCourseAssignment
+import { User, UserRole, Course, UserCourseAssignment } from '../types';
 import { Language, translations } from '../translations';
 import { useNavigate } from 'react-router-dom';
 
@@ -8,9 +8,9 @@ const UserManagement: React.FC<{ user: User, lang: Language }> = ({ user, lang }
   const navigate = useNavigate();
   const t = translations[lang];
   const [users, setUsers] = useState<User[]>([]);
-  const [courses, setCourses] = useState<Course[]>([]); // DODAJTE
+  const [courses, setCourses] = useState<Course[]>([]);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [userAssignments, setUserAssignments] = useState<UserCourseAssignment[]>([]); // DODAJTE
+  const [userAssignments, setUserAssignments] = useState<UserCourseAssignment[]>([]);
   const [isCreating, setIsCreating] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -21,48 +21,61 @@ const UserManagement: React.FC<{ user: User, lang: Language }> = ({ user, lang }
   const [assignmentDueDate, setAssignmentDueDate] = useState<string>('');
   const [isAssignmentRequired, setIsAssignmentRequired] = useState<boolean>(true);
 
-// Dodajte u useEffect u UserManagement.tsx:
-useEffect(() => {
-  if (user.role !== UserRole.ADMIN) {
-    navigate('/app');
-    return;
-  }
-  
-  const loadData = async () => {
-    setIsLoading(true);
-    try {
-      // Proverite da li treba migracija
-      const localUsers = JSON.parse(localStorage.getItem('skyway_users') || '[]');
-      const needsMigration = localUsers.some((u: User) => u.id.startsWith('u-'));
-      
-      if (needsMigration && users.length === 0) {
-        const shouldMigrate = window.confirm(
-          'Some users need to be migrated to Supabase Auth. Migrate now?'
+  useEffect(() => {
+    if (user.role !== UserRole.ADMIN) {
+      navigate('/app');
+      return;
+    }
+    
+    const loadData = async () => {
+      setIsLoading(true);
+      try {
+        // ISKLJUČIVO SUPABASE AUTH KORISNICI
+        const authUsers = await db.getAuthUsers();
+        console.log('DB [UserManagement]: Supabase Auth users loaded:', authUsers.length);
+        
+        // Učitajte kurseve iz Supabase
+        const coursesData = await db.getCourses();
+        
+        // KREIRAJTE PUNI User OBJEKAT SA DODATNIM POLJIMA
+        const fullUsers = await Promise.all(
+          authUsers.map(async (authUser) => {
+            // Proverite da li ima dodatnih podataka u localStorage
+            const localUsers = JSON.parse(localStorage.getItem('skyway_users') || '[]');
+            const localUserData = localUsers.find((lu: any) => 
+              lu.email === authUser.email || lu.id === authUser.id
+            );
+            
+            return {
+              ...authUser,
+              // Dodajte dodatna polja iz localStorage ako postoje
+              staffId: localUserData?.staffId || '',
+              airport: localUserData?.airport || '',
+              department: localUserData?.department || '',
+              jobTitle: localUserData?.jobTitle || '',
+              jobDescription: localUserData?.jobDescription || '',
+              phone: localUserData?.phone || '',
+              instructorScope: localUserData?.instructorScope || '',
+              instructorAuthStartDate: localUserData?.instructorAuthStartDate || '',
+              instructorAuthExpiry: localUserData?.instructorAuthExpiry || ''
+            };
+          })
         );
         
-        if (shouldMigrate) {
-          await db.migrateUsers();
-        }
+        setUsers(fullUsers);
+        setCourses(coursesData);
+        console.log('DB [UserManagement]: Full users:', fullUsers.length, 'Courses:', coursesData.length);
+        
+      } catch (error) {
+        console.error('Error loading data:', error);
+        alert('Error loading users from Supabase. Check console for details.');
+      } finally {
+        setIsLoading(false);
       }
-      
-      // Učitajte korisnike
-      const usersData = JSON.parse(localStorage.getItem('skyway_users') || '[]');
-      
-      // Učitajte kurseve iz Supabase
-      const coursesData = await db.getCourses();
-      
-      setUsers(usersData);
-      setCourses(coursesData);
-      console.log('Loaded', coursesData.length, 'courses');
-    } catch (error) {
-      console.error('Error loading data:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-  
-  loadData();
-}, [user, navigate]);
+    };
+    
+    loadData();
+  }, [user, navigate]);
 
   // Funkcija za učitavanje dodeljenih kurseva za korisnika
   const loadUserAssignments = async (userId: string) => {
@@ -74,6 +87,35 @@ useEffect(() => {
     } catch (error) {
       console.error('Error loading user assignments:', error);
       setUserAssignments([]);
+    }
+  };
+
+  // Funkcija za brisanje korisnika iz Supabase Auth
+  const handleDeleteUser = async (userId: string, userName: string) => {
+    if (!window.confirm(`Delete user "${userName}"? This action cannot be undone.`)) {
+      return;
+    }
+    
+    try {
+      const success = await db.deleteAuthUser(userId);
+      if (success) {
+        // Uklonite iz state-a
+        const updatedUsers = users.filter(u => u.id !== userId);
+        setUsers(updatedUsers);
+        
+        // Ako je editingUser obrisan, resetujte
+        if (editingUser?.id === userId) {
+          setEditingUser(null);
+          setUserAssignments([]);
+        }
+        
+        alert(`User "${userName}" deleted successfully`);
+      } else {
+        alert('Failed to delete user');
+      }
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      alert(`Error deleting user: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
 
@@ -107,120 +149,137 @@ useEffect(() => {
     setIsCreating(false);
   };
 
-// Zamenite postojeći handleCreateNew sa ovim:
-const handleCreateNew = () => {
-  const newUser: User = {
-    id: '', // ⭐⭐⭐ PROBLEM: PRAZAN ID! ⭐⭐⭐
-    email: '',
-    name: '',
-    role: UserRole.TRAINEE,
-    staffId: '',
-    airport: '',
-    department: '',
-    jobTitle: '',
-    jobDescription: '',
-    phone: ''
+  const handleCreateNew = () => {
+    const newUser: User = {
+      id: '',
+      email: '',
+      name: '',
+      role: UserRole.TRAINEE,
+      staffId: '',
+      airport: '',
+      department: '',
+      jobTitle: '',
+      jobDescription: '',
+      phone: ''
+    };
+    setEditingUser(newUser);
+    setIsCreating(true);
   };
-  setEditingUser(newUser);
-  setIsCreating(true);
-};
 
-// Zamenite postojeći handleSave sa ovim:
-const handleSave = async () => {
-  if (!editingUser) return;
-  
-  if (!editingUser.name || !editingUser.email) {
-    alert(t.nameEmailRequired);
-    return;
-  }
-  
-  try {
-    if (isCreating) {
-      // ⭐⭐⭐ KREIRAJTE KORISNIKA U SUPABASE AUTH PRVO ⭐⭐⭐
-      console.log('Creating new user in Supabase Auth...');
-      
-      // Generišite privremenu lozinku
-      const tempPassword = `Temp${Date.now().toString().slice(-6)}!`;
-      
-      // Kreirajte korisnika u Supabase Auth
-      const authUser = await db.createAuthUser(
-        editingUser.email,
-        tempPassword,
-        editingUser.name,
-        editingUser.role
-      );
-      
-      if (!authUser) {
-        throw new Error('Failed to create user in Supabase Auth');
-      }
-      
-      console.log('✅ Auth user created with ID:', authUser.id);
-      
-      // Sačuvajte dodatne podatke u lokalnom storage-u
-      const userToSave: User = {
-        ...authUser, // Ovo već ima pravi UUID
-        staffId: editingUser.staffId || '',
-        airport: editingUser.airport || '',
-        department: editingUser.department || '',
-        jobTitle: editingUser.jobTitle || '',
-        jobDescription: editingUser.jobDescription || '',
-        phone: editingUser.phone || '',
-        // Dodajte i auth-specific polja ako želite
-        instructorScope: editingUser.instructorScope || '',
-        instructorAuthStartDate: editingUser.instructorAuthStartDate || '',
-        instructorAuthExpiry: editingUser.instructorAuthExpiry || ''
-      };
-      
-      // Sačuvajte u localStorage (za backward compatibility)
-      const localUsers = JSON.parse(localStorage.getItem('skyway_users') || '[]');
-      localUsers.push(userToSave);
-      localStorage.setItem('skyway_users', JSON.stringify(localUsers));
-      
-      // Ažurirajte state
-      setUsers([...users, userToSave]);
-      
-      // Logujte akciju
-      await db.logAction(user.id, 'USER_CREATE', 
-        `Created user: ${userToSave.name} (${userToSave.email}), Role: ${userToSave.role}`
-      );
-      
- const message = t.userCreated || 'User created successfully';
-alert(`${message} (Temporary password: ${tempPassword})`);
-      
-    } else {
-      // Ažuriranje postojećeg korisnika
-      // Sačuvajte u localStorage
-      const localUsers = JSON.parse(localStorage.getItem('skyway_users') || '[]');
-      const index = localUsers.findIndex((u: User) => u.id === editingUser.id);
-      
-      if (index > -1) {
-        localUsers[index] = editingUser;
-      } else {
-        localUsers.push(editingUser);
-      }
-      
-      localStorage.setItem('skyway_users', JSON.stringify(localUsers));
-      
-      // Ažurirajte state
-      setUsers(localUsers);
-      
-      // Logujte akciju
-      await db.logAction(user.id, 'USER_UPDATE', 
-        `Updated user: ${editingUser.name} (${editingUser.email}), Role: ${editingUser.role}`
-      );
-      
-      alert(t.userUpdated);
+  const handleSave = async () => {
+    if (!editingUser) return;
+    
+    if (!editingUser.name || !editingUser.email) {
+      alert(t.nameEmailRequired);
+      return;
     }
     
-    // Resetujte stanje
-    setEditingUser(null);
-    setIsCreating(false);
-    
-  } catch (error) {
-    console.error('Error saving user:', error);
-    alert(`${t.saveError}: ${error instanceof Error ? error.message : String(error)}`);
-  }
-};
+    try {
+      if (isCreating) {
+        // KREIRAJTE NOVOG KORISNIKA U SUPABASE AUTH
+        console.log('Creating new user in Supabase Auth...');
+        
+        const tempPassword = `Temp${Date.now().toString().slice(-6)}!`;
+        
+        const authUser = await db.createAuthUser(
+          editingUser.email,
+          tempPassword,
+          editingUser.name,
+          editingUser.role
+        );
+        
+        if (!authUser) {
+          throw new Error('Failed to create user in Supabase Auth');
+        }
+        
+        console.log('✅ Auth user created with ID:', authUser.id);
+        
+        // SAČUVAJTE DODATNE PODATKE U localStorage (SAMO DODATNA POLJA)
+        const localUsers = JSON.parse(localStorage.getItem('skyway_users') || '[]');
+        
+        // Uklonite stare podatke ako postoje
+        const filteredLocalUsers = localUsers.filter((lu: any) => 
+          lu.id !== authUser.id && lu.email !== authUser.email
+        );
+        
+        // Dodajte nove podatke
+        const userToSave = {
+          id: authUser.id,
+          email: authUser.email,
+          name: authUser.name,
+          role: authUser.role,
+          // Dodatna polja
+          staffId: editingUser.staffId || '',
+          airport: editingUser.airport || '',
+          department: editingUser.department || '',
+          jobTitle: editingUser.jobTitle || '',
+          jobDescription: editingUser.jobDescription || '',
+          phone: editingUser.phone || '',
+          instructorScope: editingUser.instructorScope || '',
+          instructorAuthStartDate: editingUser.instructorAuthStartDate || '',
+          instructorAuthExpiry: editingUser.instructorAuthExpiry || ''
+        };
+        
+        filteredLocalUsers.push(userToSave);
+        localStorage.setItem('skyway_users', JSON.stringify(filteredLocalUsers));
+        
+        // Ažurirajte state
+        setUsers([...users, userToSave]);
+        
+        // Logujte akciju
+        await db.logAction(user.id, 'USER_CREATE', 
+          `Created user: ${userToSave.name} (${userToSave.email}), Role: ${userToSave.role}`
+        );
+        
+        const message = t.userCreated || 'User created successfully';
+        alert(`${message} (Temporary password: ${tempPassword})`);
+        
+      } else {
+        // AŽURIRAJTE POSTOJEĆEG KORISNIKA
+        console.log('Updating user in localStorage:', editingUser.id);
+        
+        const localUsers = JSON.parse(localStorage.getItem('skyway_users') || '[]');
+        
+        // Pronađite korisnika
+        const userIndex = localUsers.findIndex((lu: any) => lu.id === editingUser.id);
+        
+        if (userIndex > -1) {
+          // Ažurirajte postojećeg
+          localUsers[userIndex] = {
+            ...localUsers[userIndex],
+            ...editingUser
+          };
+        } else {
+          // Dodajte novog ako ne postoji
+          localUsers.push(editingUser);
+        }
+        
+        localStorage.setItem('skyway_users', JSON.stringify(localUsers));
+        
+        // Ažurirajte state
+        const updatedUsers = users.map(u => 
+          u.id === editingUser.id ? editingUser : u
+        );
+        setUsers(updatedUsers);
+        
+        // Logujte akciju
+        await db.logAction(user.id, 'USER_UPDATE', 
+          `Updated user: ${editingUser.name} (${editingUser.email}), Role: ${editingUser.role}`
+        );
+        
+        alert(t.userUpdated);
+      }
+      
+      // Resetujte
+      setEditingUser(null);
+      setIsCreating(false);
+      
+    } catch (error) {
+      console.error('Error saving user:', error);
+      alert(`${t.saveError}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
   const getRoleColor = (role: UserRole) => {
     switch (role) {
       case UserRole.ADMIN: return 'bg-gradient-to-r from-red-100 to-rose-100 text-red-700';
@@ -251,59 +310,58 @@ alert(`${message} (Temporary password: ${tempPassword})`);
   };
 
   // Funkcija za dodeljivanje kursa
-const handleAssignCourse = async () => {
-  if (!selectedCourseToAssign) {
-    alert(t.selectCourseFirst || 'Please select a course first');
-    return;
-  }
+  const handleAssignCourse = async () => {
+    if (!selectedCourseToAssign) {
+      alert(t.selectCourseFirst || 'Please select a course first');
+      return;
+    }
 
-  if (!editingUser) {
-    alert(t.noUserSelected || 'No user selected');
-    return;
-  }
+    if (!editingUser) {
+      alert(t.noUserSelected || 'No user selected');
+      return;
+    }
 
-  // ⭐⭐⭐ DODAJTE VALIDACIJU ID-A ⭐⭐⭐
-  if (!editingUser.id) {
-    alert(t.userNotSaved || 'Please save the user first before assigning courses');
-    return;
-  }
+    if (!editingUser.id) {
+      alert(t.userNotSaved || 'Please save the user first before assigning courses');
+      return;
+    }
 
-  console.log('Attempting to assign course:', {
-    userId: editingUser.id,
-    courseId: selectedCourseToAssign,
-    isRequired: isAssignmentRequired,
-    dueDate: assignmentDueDate,
-    assignedBy: user.id
-  });
+    console.log('Attempting to assign course:', {
+      userId: editingUser.id,
+      courseId: selectedCourseToAssign,
+      isRequired: isAssignmentRequired,
+      dueDate: assignmentDueDate,
+      assignedBy: user.id
+    });
 
-  try {
-    const assignment = await db.assignCourseToUser(
-      editingUser.id,
-      selectedCourseToAssign,
-      isAssignmentRequired,
-      assignmentDueDate || undefined,
-      user.id
-    );
-    
-    console.log('Assignment result:', assignment);
-    
-    if (assignment) {
-      await loadUserAssignments(editingUser.id);
+    try {
+      const assignment = await db.assignCourseToUser(
+        editingUser.id,
+        selectedCourseToAssign,
+        isAssignmentRequired,
+        assignmentDueDate || undefined,
+        user.id
+      );
       
-      setShowCourseAssignmentModal(false);
-      setSelectedCourseToAssign('');
-      setAssignmentDueDate('');
-      setIsAssignmentRequired(true);
+      console.log('Assignment result:', assignment);
       
-      alert(t.courseAssigned || 'Course assigned successfully');
-    } else {
+      if (assignment) {
+        await loadUserAssignments(editingUser.id);
+        
+        setShowCourseAssignmentModal(false);
+        setSelectedCourseToAssign('');
+        setAssignmentDueDate('');
+        setIsAssignmentRequired(true);
+        
+        alert(t.courseAssigned || 'Course assigned successfully');
+      } else {
+        alert(t.assignmentError || 'Error assigning course');
+      }
+    } catch (error) {
+      console.error('Error assigning course:', error);
       alert(t.assignmentError || 'Error assigning course');
     }
-  } catch (error) {
-    console.error('Error assigning course:', error);
-    alert(t.assignmentError || 'Error assigning course');
-  }
-};
+  };
 
   if (isLoading) {
     return (
@@ -495,11 +553,27 @@ const handleAssignCourse = async () => {
                       </div>
                     </div>
 
-                    <button className="p-2 text-gray-400 hover:text-blue-600 transition-colors">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                      </svg>
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button className="p-2 text-gray-400 hover:text-blue-600 transition-colors">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                      </button>
+                      
+                      {/* DODAJTE DELETE DUGME OVDE */}
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteUser(u.id, u.name);
+                        }}
+                        className="p-2 text-red-400 hover:text-red-600 transition-colors"
+                        title="Delete user"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -674,7 +748,6 @@ const handleAssignCourse = async () => {
                   </div>
                 </div>
 
-                {/* DODAJTE OVU SEKCIJU ZA DODELJENE KURSEVE */}
                 {/* Assigned Courses Section */}
                 <div className="p-5 bg-gradient-to-r from-purple-50 to-violet-50 rounded-xl border border-purple-200">
                   <div className="flex items-center justify-between mb-4">
@@ -684,18 +757,17 @@ const handleAssignCourse = async () => {
                       </svg>
                       {t.assignedCourses || 'Assigned Courses'}
                     </h3>
-            
-<button
-  onClick={() => setShowCourseAssignmentModal(true)}
-  className="px-4 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors text-sm flex items-center gap-2"
-  type="button"
-  disabled={!editingUser.id} // ⭐⭐⭐ ONEMOGUĆITE AKO NEMA ID ⭐⭐⭐
->
-  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-  </svg>
-  {t.assignCourse || 'Assign Course'}
-</button>
+                    <button
+                      onClick={() => setShowCourseAssignmentModal(true)}
+                      className="px-4 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors text-sm flex items-center gap-2"
+                      type="button"
+                      disabled={!editingUser.id}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      {t.assignCourse || 'Assign Course'}
+                    </button>
                   </div>
                   
                   {userAssignments.length === 0 ? (

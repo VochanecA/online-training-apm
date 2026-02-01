@@ -21,6 +21,8 @@ import PublicCourses from './pages/PublicCourses';
 import UserAnalytics from './pages/UserAnalytics';
 
 import LessonExamView from './pages/LessonExamView';
+import CertificateManagement from './pages/CertificateManagement';
+
 
 
 
@@ -117,29 +119,26 @@ const handleLoginSuccess = () => {
           !user ? (
             <Navigate to="/" replace />
           ) : (
-            <Layout user={user} lang={lang} setLang={setLang}>
-              <Routes>
-                <Route path="/" element={<Dashboard user={user} lang={lang} />} />
-                <Route path="/course/:id" element={<CourseDetail user={user} lang={lang} />} />
-                <Route path="/lesson/:courseId/:lessonId" element={<LessonView user={user} lang={lang} />} />
-                <Route path="/exam/:courseId" element={<ExamView user={user} lang={lang} />} />
-                <Route path="/certificate/:courseId" element={<CertificateView user={user} lang={lang} />} />
-                <Route path="/training-record/:courseId" element={<TrainingRecordView user={user} lang={lang} />} />
-                <Route path="/profile" element={<Profile user={user} lang={lang} />} />
-                <Route path="/admin/courses" element={<CourseManagement user={user} lang={lang} />} />
-                <Route path="/admin/reports" element={<Reports user={user} lang={lang} />} />
-                <Route path="/admin/users" element={<UserManagement user={user} lang={lang} />} />
-                <Route path="/admin/course/new" element={<CourseEditor user={user} lang={lang} />} />
-                <Route path="/admin/course/edit/:id" element={<CourseEditor user={user} lang={lang} />} />
-                <Route path="/lesson-exam/:courseId/:lessonId" element={<LessonExamView user={user} lang={lang} />} />
-
-
-     
-
-<Route path="/admin/analytics" element={<UserAnalytics />} />
-                <Route path="*" element={<Navigate to="/app" replace />} />
-              </Routes>
-            </Layout>
+           <Layout user={user} lang={lang} setLang={setLang}>
+      <Routes>
+        <Route path="/" element={<Dashboard user={user} lang={lang} />} />
+        <Route path="/course/:id" element={<CourseDetail user={user} lang={lang} />} />
+        <Route path="/lesson/:courseId/:lessonId" element={<LessonView user={user} lang={lang} />} />
+        <Route path="/exam/:courseId" element={<ExamView user={user} lang={lang} />} />
+        <Route path="/certificate/:courseId" element={<CertificateView user={user} lang={lang} />} />
+        <Route path="/training-record/:courseId" element={<TrainingRecordView user={user} lang={lang} />} />
+        <Route path="/profile" element={<Profile user={user} lang={lang} />} />
+        <Route path="/admin/courses" element={<CourseManagement user={user} lang={lang} />} />
+        <Route path="/admin/reports" element={<Reports user={user} lang={lang} />} />
+        <Route path="/admin/certificates" element={<CertificateManagement user={user} lang={lang} />} />
+        <Route path="/admin/users" element={<UserManagement user={user} lang={lang} />} />
+        <Route path="/admin/course/new" element={<CourseEditor user={user} lang={lang} />} />
+        <Route path="/admin/course/edit/:id" element={<CourseEditor user={user} lang={lang} />} />
+        <Route path="/lesson-exam/:courseId/:lessonId" element={<LessonExamView user={user} lang={lang} />} />
+        <Route path="/admin/analytics" element={<UserAnalytics />} />
+        <Route path="*" element={<Navigate to="/app" replace />} />
+      </Routes>
+    </Layout>
           )
         } />
         

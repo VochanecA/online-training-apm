@@ -1357,54 +1357,63 @@ assignCourseToUser: async (userId: string, courseId: string, isRequired: boolean
     console.log('DB: ===== START assignCourseToUser =====');
     console.log('DB: Raw input:', { userId, courseId, isRequired, dueDate, assignedBy });
     
-    // Validacija
+    // Validacija - ODBIJANJE LOKALNIH KORISNIKA
     if (!userId?.trim()) throw new Error('User ID is required');
     if (!courseId?.trim()) throw new Error('Course ID is required');
     
-    let finalUserId = userId;
-    
-    // Mapiranje lokalnih ID-jeva
+    // ⭐⭐⭐ ODBIJTE LOKALNE KORISNIKE ⭐⭐⭐
     if (userId.startsWith('u-')) {
-      console.log('DB: Local user ID detected');
-      
-      const localUsers = JSON.parse(localStorage.getItem('skyway_users') || '[]');
-      const localUser = localUsers.find((u: any) => u.id === userId);
-      
-      if (!localUser) throw new Error(`Local user not found: ${userId}`);
-      if (!localUser.email) throw new Error(`Local user has no email: ${userId}`);
-      
-      console.log('DB: Found local user:', localUser.email);
-      
-      try {
-        const { data: { users: authUsers } } = await supabase.auth.admin.listUsers();
-        const authUser = authUsers?.find((au: any) => au.email === localUser.email);
-        
-        if (authUser) {
-          finalUserId = authUser.id;
-          console.log('DB: Mapped to auth user ID:', finalUserId);
-        } else {
-          console.warn('DB: No auth user found, using local ID');
-        }
-      } catch (error) {
-        console.warn('DB: Cannot fetch auth users:', error);
-      }
+      throw new Error('Local users (starting with "u-") are not supported. Please use Supabase Auth users only.');
     }
     
-    // Validacija UUID-ova
-    const isValidUserId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(finalUserId);
+    let finalUserId = userId;
+    
+    // Validacija UUID-ova - SADA OČEKIVANJE SAMO SUPABASE ID-jeva
+    const isValidUserId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
     const isValidCourseId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(courseId);
     
-    if (!isValidUserId) throw new Error(`Invalid user ID: ${finalUserId}`);
-    if (!isValidCourseId) throw new Error(`Invalid course ID: ${courseId}`);
+    if (!isValidUserId) {
+      throw new Error(`Invalid Supabase Auth user ID: ${userId}. User must be created in Supabase Auth.`);
+    }
+    
+    if (!isValidCourseId) {
+      throw new Error(`Invalid course ID: ${courseId}`);
+    }
+    
+    // Proverite da li korisnik postoji u Supabase Auth
+    console.log('DB: Verifying user exists in Supabase Auth...');
+    try {
+      const { data: { users: authUsers } } = await supabase.auth.admin.listUsers();
+      const authUser = authUsers?.find((au: any) => au.id === userId);
+      
+      if (!authUser) {
+        throw new Error(`User not found in Supabase Auth: ${userId}. Please create user in Supabase Auth first.`);
+      }
+      
+      console.log('DB: User verified in Supabase Auth:', authUser.email);
+    } catch (authError) {
+      console.error('DB: Error verifying user in Auth:', authError);
+      throw new Error(`Cannot verify user in Supabase Auth: ${authError instanceof Error ? authError.message : 'Unknown error'}`);
+    }
     
     // Proverite kurs
-    const { data: courseCheck } = await supabase
+    console.log('DB: Verifying course exists...');
+    const { data: courseCheck, error: courseError } = await supabase
       .from('courses')
-      .select('id')
+      .select('id, title')
       .eq('id', courseId)
       .maybeSingle();
     
-    if (!courseCheck) throw new Error(`Course not found: ${courseId}`);
+    if (courseError) {
+      console.error('DB: Error checking course:', courseError);
+      throw courseError;
+    }
+    
+    if (!courseCheck) {
+      throw new Error(`Course not found: ${courseId}`);
+    }
+    
+    console.log('DB: Course verified:', courseCheck.title);
     
     // Validacija assigned_by
     if (assignedBy && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(assignedBy)) {
@@ -1414,11 +1423,16 @@ assignCourseToUser: async (userId: string, courseId: string, isRequired: boolean
     
     // Proverite da li već postoji dodela
     console.log('DB: Checking for existing assignment...');
-    const { data: existingAssignments } = await supabase
+    const { data: existingAssignments, error: existingError } = await supabase
       .from('user_course_assignments')
       .select('*')
-      .eq('user_id', finalUserId)
+      .eq('user_id', userId)
       .eq('course_id', courseId);
+    
+    if (existingError) {
+      console.error('DB: Error checking existing assignments:', existingError);
+      throw existingError;
+    }
     
     console.log('DB: Existing assignments found:', existingAssignments?.length || 0);
     
@@ -1452,14 +1466,13 @@ assignCourseToUser: async (userId: string, courseId: string, isRequired: boolean
       // KREIRAJTE NOVU
       console.log('DB: Creating new assignment...');
       
-      // ⭐⭐⭐ OVO JE KLJUČNO: koristite assigned_at umesto created_at ⭐⭐⭐
       const assignmentData = {
-        user_id: finalUserId,
+        user_id: userId,
         course_id: courseId,
         is_required: isRequired,
         due_date: dueDate || null,
         assigned_by: assignedBy,
-        assigned_at: new Date().toISOString(), // ⭐⭐⭐ OVO JE VAŽNO ⭐⭐⭐
+        assigned_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
       
@@ -1491,6 +1504,9 @@ assignCourseToUser: async (userId: string, courseId: string, isRequired: boolean
     if (error instanceof Error) {
       console.error('DB: Error message:', error.message);
       console.error('DB: Error stack:', error.stack);
+      
+      // Vratite korisnički-friendly poruku
+      throw new Error(`Failed to assign course: ${error.message}`);
     }
     
     console.error('DB: ===== END ERROR =====');
@@ -1580,5 +1596,292 @@ assignCourseToUser: async (userId: string, courseId: string, isRequired: boolean
       console.error('Error getting users assigned to course:', error);
       return [];
     }
+  },
+  // db.ts - dodajte cleanup funkciju
+cleanupLocalUsers: async (): Promise<void> => {
+  try {
+    const localUsers = JSON.parse(localStorage.getItem('skyway_users') || '[]');
+    const { data: { users: authUsers } } = await supabase.auth.admin.listUsers();
+    
+    const authUserIds = authUsers?.map(au => au.id) || [];
+    const authUserEmails = authUsers?.map(au => au.email) || [];
+    
+    // Zadržite samo korisnike koji postoje u Supabase Auth
+    const validLocalUsers = localUsers.filter((lu: any) => 
+      authUserIds.includes(lu.id) || authUserEmails.includes(lu.email)
+    );
+    
+    localStorage.setItem('skyway_users', JSON.stringify(validLocalUsers));
+    console.log('DB: Cleaned up local users. Removed:', localUsers.length - validLocalUsers.length);
+  } catch (error) {
+    console.error('DB: Error cleaning up local users:', error);
   }
+},
+deleteAuthUser: async (userId: string): Promise<boolean> => {
+  try {
+    console.log('DB: Deleting auth user:', userId);
+    
+    // ⭐⭐⭐ KORISTITE supabaseAdmin ⭐⭐⭐
+    const { error } = await supabaseAdmin.auth.admin.deleteUser(userId);
+    
+    if (error) {
+      console.error('DB: Error deleting auth user:', error);
+      throw error;
+    }
+    
+    // Obrišite i iz localStorage
+    const localUsers = JSON.parse(localStorage.getItem('skyway_users') || '[]');
+    const filteredUsers = localUsers.filter((u: any) => u.id !== userId);
+    localStorage.setItem('skyway_users', JSON.stringify(filteredUsers));
+    
+    console.log('DB: Auth user deleted successfully');
+    return true;
+  } catch (error) {
+    console.error('DB: Error in deleteAuthUser:', error);
+    return false;
+  }
+},
+// db.ts - dodajte ove funkcije
+
+  // Dohvata sve progress podatke sa kursima i korisnicima
+  getAllProgressWithDetails: async (): Promise<any[]> => {
+    try {
+      console.log('DB: Getting all progress with details...');
+      
+      // Dohvati sve progress podatke sa kursima
+      const { data: allProgress, error: progressError } = await supabase
+        .from('user_progress')
+        .select(`
+          *,
+          course:courses(*)
+        `)
+        .eq('is_completed', true); // Samo završene kurseve
+      
+      if (progressError) {
+        console.error('DB: Error fetching progress with details:', progressError);
+        throw progressError;
+      }
+      
+      if (!allProgress) return [];
+      
+      // Dohvati sve korisnike iz auth
+      const { data: { users: authUsers }, error: authError } = await supabaseAdmin.auth.admin.listUsers();
+      
+      if (authError) {
+        console.error('DB: Error fetching auth users:', authError);
+        throw authError;
+      }
+      
+      // Mapiraj progress sa korisničkim podacima
+      const progressWithDetails = await Promise.all(
+        allProgress.map(async (item: any) => {
+          // Pronađi auth usera
+          const authUser = authUsers?.find((au: any) => au.id === item.user_id);
+          
+          // Proveri da li ima dodatnih podataka u localStorage
+          const localUsers = JSON.parse(localStorage.getItem('skyway_users') || '[]');
+          const localUserData = localUsers.find((lu: any) => lu.id === item.user_id);
+          
+          const userMeta = authUser?.user_metadata || {};
+          
+          return {
+            id: item.id,
+            certificateId: item.certificate_id,
+            userId: item.user_id,
+            userName: localUserData?.name || 
+                     userMeta.full_name || 
+                     userMeta.name || 
+                     authUser?.email?.split('@')[0] || 
+                     'Unknown User',
+            userEmail: authUser?.email || '',
+            userRole: localUserData?.role || userMeta.role || 'TRAINEE',
+            courseId: item.course_id,
+            courseTitle: item.course?.title || 'Unknown Course',
+            courseCategory: item.course?.category || '',
+            examScore: item.exam_score || 0,
+            practicalCheckStatus: item.practical_check_status || '',
+            completionDate: item.completion_date,
+            expiryDate: item.expiry_date,
+            createdAt: item.created_at,
+            updatedAt: item.updated_at
+          };
+        })
+      );
+      
+      return progressWithDetails;
+    } catch (error) {
+      console.error('Error fetching progress with details:', error);
+      return [];
+    }
+  },
+
+  // Export sertifikata u CSV
+  exportCertificatesToCSV: async (certificates: any[], filename: string): Promise<void> => {
+    try {
+      if (!certificates.length) return;
+      
+      const headers = [
+        'Certificate ID',
+        'User Name',
+        'User Email',
+        'Course Title',
+        'Course Category',
+        'Exam Score (%)',
+        'Practical Status',
+        'Completion Date',
+        'Expiry Date',
+        'Created At'
+      ];
+      
+      const rows = certificates.map(cert => [
+        cert.certificateId || 'N/A',
+        cert.userName || 'N/A',
+        cert.userEmail || 'N/A',
+        cert.courseTitle || 'N/A',
+        cert.courseCategory || 'N/A',
+        cert.examScore || '0',
+        cert.practicalCheckStatus || 'N/A',
+        cert.completionDate ? new Date(cert.completionDate).toLocaleDateString() : 'N/A',
+        cert.expiryDate ? new Date(cert.expiryDate).toLocaleDateString() : 'N/A',
+        cert.createdAt ? new Date(cert.createdAt).toLocaleDateString() : 'N/A'
+      ]);
+      
+      const csvContent = [
+        headers.join(','),
+        ...rows.map(row => row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(','))
+      ].join('\n');
+      
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      
+      link.setAttribute('href', url);
+      link.setAttribute('download', `${filename}.csv`);
+      link.style.visibility = 'hidden';
+      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      console.log('CSV export successful:', certificates.length, 'certificates');
+    } catch (error) {
+      console.error('Error exporting certificates to CSV:', error);
+      throw error;
+    }
+  },
+
+  // Regeneriše certificate ID
+  regenerateCertificateId: async (progressId: string): Promise<string | null> => {
+    try {
+      const newCertificateId = `CT-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+      
+      const { error } = await supabase
+        .from('user_progress')
+        .update({ certificate_id: newCertificateId })
+        .eq('id', progressId);
+      
+      if (error) {
+        console.error('DB: Error regenerating certificate ID:', error);
+        throw error;
+      }
+      
+      return newCertificateId;
+    } catch (error) {
+      console.error('Error regenerating certificate ID:', error);
+      return null;
+    }
+  },
+
+  // Dodatna pomocna funkcija za statistike
+  getCertificateStats: async (): Promise<{
+    total: number;
+    active: number;
+    expired: number;
+    needsRenewal: number;
+    practicalCompetent: number;
+  }> => {
+    try {
+      const certificates = await db.getAllProgressWithDetails();
+      const now = new Date();
+      const thirtyDaysFromNow = new Date();
+      thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+      
+      return {
+        total: certificates.length,
+        active: certificates.filter(cert =>
+          !cert.expiryDate || new Date(cert.expiryDate) >= now
+        ).length,
+        expired: certificates.filter(cert =>
+          cert.expiryDate && new Date(cert.expiryDate) < now
+        ).length,
+        needsRenewal: certificates.filter(cert =>
+          cert.expiryDate &&
+          new Date(cert.expiryDate) < thirtyDaysFromNow &&
+          new Date(cert.expiryDate) >= now
+        ).length,
+        practicalCompetent: certificates.filter(cert =>
+          cert.practicalCheckStatus === 'COMPETENT'
+        ).length,
+      };
+    } catch (error) {
+      console.error('Error getting certificate stats:', error);
+      return {
+        total: 0,
+        active: 0,
+        expired: 0,
+        needsRenewal: 0,
+        practicalCompetent: 0
+      };
+    }
+  },
+
+  // Helper funkcija za dobijanje sertifikata za određenog korisnika
+  getUserCertificates: async (userId: string): Promise<any[]> => {
+    try {
+      const { data: userProgress, error } = await supabase
+        .from('user_progress')
+        .select(`
+          *,
+          course:courses(*)
+        `)
+        .eq('user_id', userId)
+        .eq('is_completed', true);
+      
+      if (error) throw error;
+      
+      if (!userProgress) return [];
+      
+      // Dohvati korisničke podatke
+      const { data: { users: authUsers } } = await supabaseAdmin.auth.admin.listUsers();
+      const authUser = authUsers?.find((au: any) => au.id === userId);
+      const localUsers = JSON.parse(localStorage.getItem('skyway_users') || '[]');
+      const localUserData = localUsers.find((lu: any) => lu.id === userId);
+      
+      const userMeta = authUser?.user_metadata || {};
+      
+      return userProgress.map((item: any) => ({
+        id: item.id,
+        certificateId: item.certificate_id,
+        userId: item.user_id,
+        userName: localUserData?.name || 
+                 userMeta.full_name || 
+                 userMeta.name || 
+                 authUser?.email?.split('@')[0] || 
+                 'Unknown User',
+        userEmail: authUser?.email || '',
+        courseId: item.course_id,
+        courseTitle: item.course?.title || 'Unknown Course',
+        courseCategory: item.course?.category || '',
+        examScore: item.exam_score || 0,
+        practicalCheckStatus: item.practical_check_status || '',
+        completionDate: item.completion_date,
+        expiryDate: item.expiry_date,
+        createdAt: item.created_at
+      }));
+    } catch (error) {
+      console.error('Error getting user certificates:', error);
+      return [];
+    }
+  }
+
 };

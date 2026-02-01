@@ -305,6 +305,45 @@ assignCourseToUser: 'Assign Course to User',
     statusInProgress: 'In Progress',
     statusCompleted: 'Completed',
     statusExpired: 'Expired',
+
+      // DODATI ISPOD POSTOJEĆIH:
+    certificateManagement: 'Certificate Management',
+    viewManageExport: 'View, manage, and export training certificates',
+    certificateDirectory: 'Certificate Directory',
+    searchAndManageCertificates: 'Search and manage issued certificates',
+    totalCertificates: 'Total Certificates',
+    filtered: 'Filtered',
+    searchCertificatePlaceholder: 'Search by name, email, course, or certificate ID...',
+    allCertificates: 'All Certificates',
+    activeOnly: 'Active Only',
+    expiredOnly: 'Expired Only',
+    practicalCompetent: 'Practical Competent',
+    needsRenewal: 'Needs Renewal (30 days)',
+
+    regenerateId: 'Regenerate Certificate ID',
+    bulkPrint: 'Bulk Print',
+    exportCSV: 'Export CSV',
+    noCertificatesFound: 'No certificates found',
+    adjustSearchFilters: 'Adjust your search criteria or filters',
+    certificateDetails: 'Certificate Details',
+    userInformation: 'User Information',
+    courseInformation: 'Course Information',
+    certificateDates: 'Certificate Dates',
+
+
+    issuedOn: 'Issued On',
+    noExpiry: 'No expiry',
+
+    regenerateIdWarning: 'Regenerate Certificate ID Warning',
+    regenerateIdMessage: 'Are you sure you want to regenerate the certificate ID for',
+    regenerateWarning: 'This will invalidate the current certificate ID. The old ID will no longer be verifiable.',
+    regenerate: 'Regenerate ID',
+
+    certificateId: 'Certificate ID',
+    practicalCheckStatus: 'Practical Check Status',
+
+    
+    loadingCertificates: 'Loading certificates...',
   },
   me: {
     dashboard: 'Kontrolna tabla',
@@ -612,5 +651,42 @@ assignCourseToUser: 'Dodijeli kurs korisniku',
     statusInProgress: 'U Toku',
     statusCompleted: 'Završeno',
     statusExpired: 'Isteklo',
+
+        // DODATI ISPOD POSTOJEĆIH:
+    certificateManagement: 'Upravljanje Sertifikatima',
+    viewManageExport: 'Pregled, upravljanje i izvoz sertifikata obuke',
+    certificateDirectory: 'Direktorij Sertifikata',
+    searchAndManageCertificates: 'Pretražite i upravljajte izdatim sertifikatima',
+    totalCertificates: 'Ukupno Sertifikata',
+    filtered: 'Filtrirano',
+    searchCertificatePlaceholder: 'Pretraži po imenu, emailu, kursu ili ID sertifikata...',
+    allCertificates: 'Svi Sertifikati',
+    activeOnly: 'Samo Aktivni',
+    expiredOnly: 'Samo Istekli',
+    practicalCompetent: 'Praktično Kompetentan',
+    needsRenewal: 'Potrebno Obnavljanje (30 dana)',
+
+    regenerateId: 'Regeneriši ID Sertifikata',
+    bulkPrint: 'Grupno Štampanje',
+    exportCSV: 'Izvezi CSV',
+    noCertificatesFound: 'Nema pronađenih sertifikata',
+    adjustSearchFilters: 'Prilagodite kriterije pretrage ili filtere',
+    certificateDetails: 'Detalji Sertifikata',
+    userInformation: 'Informacije o Korisniku',
+    courseInformation: 'Informacije o Kursu',
+    certificateDates: 'Datumi Sertifikata',
+
+    issuedOn: 'Datum Izdavanja',
+    noExpiry: 'Bez isteka',
+
+    regenerateIdWarning: 'Upozorenje za Regenerisanje ID Sertifikata',
+    regenerateIdMessage: 'Da li ste sigurni da želite regenerisati ID sertifikata za',
+    regenerateWarning: 'Ovo će poništiti trenutni ID sertifikata. Stari ID više neće biti moguće verifikovati.',
+    regenerate: 'Regeneriši ID',
+ 
+    certificateId: 'ID Sertifikata',
+    practicalCheckStatus: 'Status Praktične Provjere',
+
+    loadingCertificates: 'Učitavanje sertifikata...',
   }
 };
