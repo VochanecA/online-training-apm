@@ -1144,7 +1144,7 @@ const LessonView: React.FC<{ user: User; lang: Language }> = ({ user, lang }) =>
                           {lang === 'en' ? 'Learning Requirements' : 'Zahtevi za učenje'}
                         </h4>
                         <p className="text-sm text-gray-600">
-                          {lang === 'en' ? 'Minimum active learning time:' : 'Minimalno aktivno vreme učenja:'}
+                          {lang === 'en' ? 'Minimum active learning time:' : 'Minimalno aktivno vrijeme učenja:'}
                         </p>
                       </div>
                     </div>
@@ -1160,7 +1160,7 @@ const LessonView: React.FC<{ user: User; lang: Language }> = ({ user, lang }) =>
                       <p className="text-sm text-amber-600 bg-amber-50 px-3 py-1.5 rounded-lg">
                         {lang === 'en' 
                           ? 'Time counts only when interacting with materials' 
-                          : 'Vreme se računa samo prilikom interakcije sa materijalima'}
+                          : 'Vrijeme se računa samo prilikom interakcije sa materijalima'}
                       </p>
                     </div>
                   </div>
@@ -1203,7 +1203,7 @@ const LessonView: React.FC<{ user: User; lang: Language }> = ({ user, lang }) =>
                     <p className="text-gray-600 max-w-md mx-auto">
                       {lang === 'en' 
                         ? 'This lesson doesn\'t have any learning materials yet.' 
-                        : 'Ova lekcija još uvek nema materijale za učenje.'}
+                        : 'Ova lekcija još uvijek nema materijale za učenje.'}
                     </p>
                   </div>
                 ) : (
@@ -1273,7 +1273,7 @@ const LessonView: React.FC<{ user: User; lang: Language }> = ({ user, lang }) =>
                             {/* Active Learning Indicator */}
                             <div className="mt-3 flex items-center gap-2 text-sm">
                               <span className="text-blue-600 font-medium">
-                                ⏱️ {lang === 'en' ? 'Active time counted when opened' : 'Aktivno vreme se računa pri otvaranju'}
+                                ⏱️ {lang === 'en' ? 'Active time counted when opened' : 'Aktivno vrijeme se računa pri otvaranju'}
                               </span>
                             </div>
                           </div>
@@ -1501,7 +1501,7 @@ const LessonView: React.FC<{ user: User; lang: Language }> = ({ user, lang }) =>
                       </svg>
                     </div>
                     <p className="text-xs font-medium text-gray-500">
-                      {lang === 'en' ? 'Total Time' : 'Ukupno vreme'}
+                      {lang === 'en' ? 'Total Time' : 'Ukupno vrijeme'}
                     </p>
                     <p className="text-lg font-bold text-gray-900">{formatTime(totalTimeSpent)}</p>
                   </div>
@@ -1518,7 +1518,7 @@ const LessonView: React.FC<{ user: User; lang: Language }> = ({ user, lang }) =>
                           </svg>
                         </div>
                         <h4 className="font-semibold text-amber-800">
-                          {lang === 'en' ? 'Active Time Required' : 'Potrebno aktivno vreme'}
+                          {lang === 'en' ? 'Active Time Required' : 'Potrebno aktivno vrijeme'}
                         </h4>
                       </div>
                       <p className="text-amber-700 font-medium text-lg mb-1">

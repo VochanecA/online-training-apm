@@ -128,7 +128,7 @@ const UserAnalytics: React.FC = () => {
       ? passedAttempts.reduce((sum, a) => sum + a.score, 0) / passedAttempts.length 
       : 0;
     
-    // Prosečno vreme provedeno (u minutima)
+    // Prosečno vrijeme provedeno (u minutima)
     const totalTimeSpent = progresses.reduce((sum, p) => {
       const timeSpent = Object.values(p.lessonTimeSpent).reduce((s, t) => s + t, 0);
       return sum + timeSpent;
@@ -151,7 +151,7 @@ const UserAnalytics: React.FC = () => {
 
   const exportToCSV = () => {
     // Priprema podataka za CSV izvoz
-    const headers = ['Kurs', 'Ukupno upisano', 'Završeno', 'U toku', 'Prosječna ocena', 'Prosečno vreme (min)', 'Stopa završetka (%)'];
+    const headers = ['Kurs', 'Ukupno upisano', 'Završeno', 'U toku', 'Prosječna ocena', 'Prosečno vrijeme (min)', 'Stopa završetka (%)'];
     const rows = courseAnalytics.map(course => [
       course.courseTitle,
       course.totalEnrolled.toString(),
